@@ -210,7 +210,7 @@ function abstract_call_gf_by_type(interp::AbstractInterpreter, @nospecialize(f),
         all_effects = Effects(all_effects; nothrow=false)
     end
 
-    rettype = from_interprocedural!(𝕃ₚ, rettype, sv, arginfo, conditionals)
+    (; rt, effects) = from_interprocedural!(𝕃ₚ, rettype, all_effects, sv, arginfo, conditionals)
 
     # Also considering inferring the compilation signature for this method, so
     # it is available to the compiler in case it ends up needing it.
@@ -219,7 +219,7 @@ function abstract_call_gf_by_type(interp::AbstractInterpreter, @nospecialize(f),
         method = match.method
         sig = match.spec_types
         mi = specialize_method(match; preexisting=true)
-        if mi !== nothing && !const_prop_methodinstance_heuristic(interp, mi, arginfo, sv)
+        if mi !== nothing && !const_prop_methodinstance_heuristic(interp, mi, arginfo, Effects(), sv)
             csig = get_compileable_sig(method, sig, match.sparams)
             if csig !== nothing && csig !== sig
                 abstract_call_method(interp, method, csig, match.sparams, multiple_matches, StmtInfo(false), sv)
@@ -227,7 +227,7 @@ function abstract_call_gf_by_type(interp::AbstractInterpreter, @nospecialize(f),
         end
     end
 
-    if call_result_unused(si) && !(rettype === Bottom)
+    if call_result_unused(si) && !(rt === Bottom)
         add_remark!(interp, sv, "Call result type was widened because the return value is unused")
         # We're mainly only here because the optimizer might want this code,
         # but we ourselves locally don't typically care about it locally
@@ -235,16 +235,16 @@ function abstract_call_gf_by_type(interp::AbstractInterpreter, @nospecialize(f),
         # So avoid adding an edge, since we don't want to bother attempting
         # to improve our result even if it does change (to always throw),
         # and avoid keeping track of a more complex result type.
-        rettype = Any
+        rt = Any
     end
-    add_call_backedges!(interp, rettype, all_effects, edges, matches, atype, sv)
+    add_call_backedges!(interp, rt, effects, edges, matches, atype, sv)
     if !isempty(sv.pclimitations) # remove self, if present
         delete!(sv.pclimitations, sv)
         for caller in sv.callers_in_cycle
             delete!(sv.pclimitations, caller)
         end
     end
-    return CallMeta(rettype, all_effects, info)
+    return CallMeta(rt, effects, info)
 end
 
 struct FailedMethodMatch
@@ -348,15 +348,24 @@ function find_matching_methods(𝕃::AbstractLattice,
     end
 end
 
-"""
-    from_interprocedural!(𝕃ₚ::AbstractLattice, rt, sv::InferenceState, arginfo::ArgInfo, maybecondinfo) -> newrt
+struct InterproceduralResult
+    rt
+    effects::Effects
+    InterproceduralResult(@nospecialize(rt), effects::Effects) = new(rt, effects)
+end
 
-Converts inter-procedural return type `rt` into a local lattice element `newrt`,
-that is appropriate in the context of current local analysis frame `sv`, especially:
+"""
+    from_interprocedural!(𝕃ₚ::AbstractLattice, rt, effects::Effects,
+        sv::InferenceState, arginfo::ArgInfo, maybecondinfo) -> InterproceduralResult
+
+Converts extended lattice element `rt` and `effects::Effects` that represent inferred
+return type and method call effects into new lattice ement and `Effects` that are
+appropriate in the context of current local analysis frame `sv`, especially:
 - unwraps `rt::LimitedAccuracy` and collects its limitations into the current frame `sv`
 - converts boolean `rt` to new boolean `newrt` in a way `newrt` can propagate extra conditional
   refinement information, e.g. translating `rt::InterConditional` into `newrt::Conditional`
   that holds a type constraint information about a variable in `sv`
+- recomputes `effects.const_prop_profitable_args` so that they are imposed on call arguments of `sv`
 
 This function _should_ be used wherever we propagate results returned from
 `abstract_call_method` or `abstract_call_method_with_const_args`.
@@ -368,7 +377,8 @@ In such cases `maybecondinfo` should be either of:
 When we deal with multiple `MethodMatch`es, it's better to precompute `maybecondinfo` by
 `tmerge`ing argument signature type of each method call.
 """
-function from_interprocedural!(𝕃ₚ::AbstractLattice, @nospecialize(rt), sv::InferenceState, arginfo::ArgInfo, @nospecialize(maybecondinfo))
+function from_interprocedural!(𝕃ₚ::AbstractLattice, @nospecialize(rt), effects::Effects,
+    sv::InferenceState, arginfo::ArgInfo, @nospecialize(maybecondinfo))
     rt = collect_limitations!(rt, sv)
     if isa(rt, InterMustAlias)
         rt = from_intermustalias(rt, arginfo)
@@ -380,7 +390,23 @@ function from_interprocedural!(𝕃ₚ::AbstractLattice, @nospecialize(rt), sv::
         end
     end
     @assert !(rt isa InterConditional || rt isa InterMustAlias) "invalid lattice element returned from inter-procedural context"
-    return rt
+    if effects.const_prop_profitable_args !== NO_PROFITABLE_ARGS
+        argsbits = 0x00
+        fargs = arginfo.fargs
+        if fargs !== nothing
+            for i = 1:length(fargs)
+                if is_const_prop_profitable_arg(effects, i)
+                    arg = fargs[i]
+                    if is_call_argument(arg, sv) && 1 ≤ slot_id(arg) ≤ 8
+                        argsbits |= 0x01 << (slot_id(arg)-1)
+                    end
+                end
+            end
+        end
+        const_prop_profitable_args = ConstPropProfitableArgs(argsbits)
+        effects = Effects(effects; const_prop_profitable_args)
+    end
+    return InterproceduralResult(rt, effects)
 end
 
 function collect_limitations!(@nospecialize(typ), sv::InferenceState)
@@ -993,9 +1019,8 @@ function abstract_call_method_with_const_args(interp::AbstractInterpreter,
         end
     end
     # try constant prop'
-    inf_cache = get_inference_cache(interp)
     𝕃ᵢ = typeinf_lattice(interp)
-    inf_result = cache_lookup(𝕃ᵢ, mi, arginfo.argtypes, inf_cache)
+    inf_result = cache_lookup(𝕃ᵢ, mi, arginfo.argtypes, get_inference_cache(interp))
     if inf_result === nothing
         # if there might be a cycle, check to make sure we don't end up
         # calling ourselves here.
@@ -1062,7 +1087,7 @@ function maybe_get_const_prop_profitable(interp::AbstractInterpreter,
         return nothing
     end
     mi = mi::MethodInstance
-    if !force && !const_prop_methodinstance_heuristic(interp, mi, arginfo, sv)
+    if !force && !const_prop_methodinstance_heuristic(interp, mi, arginfo, result.effects, sv)
         add_remark!(interp, sv, "[constprop] Disabled by method instance heuristic")
         return nothing
     end
@@ -1214,7 +1239,7 @@ end
 # where we would spend a lot of time, but are probably unlikely to get an improved
 # result anyway.
 function const_prop_methodinstance_heuristic(interp::AbstractInterpreter,
-    mi::MethodInstance, arginfo::ArgInfo, sv::InferenceState)
+    mi::MethodInstance, arginfo::ArgInfo, effects::Effects, sv::InferenceState)
     method = mi.def::Method
     if method.is_for_opaque_closure
         # Not inlining an opaque closure can be very expensive, so be generous
@@ -1239,6 +1264,8 @@ function const_prop_methodinstance_heuristic(interp::AbstractInterpreter,
     elseif is_stmt_noinline(flag)
         # this call won't be inlined, thus this constant-prop' will most likely be unfruitful
         return false
+    elseif any_const_prop_profitable_args(effects, arginfo.argtypes)
+        return true
     else
         # Peek at the inferred result for the method to determine if the optimizer
         # was able to cut it down to something simple (inlineable in particular).
@@ -1254,6 +1281,21 @@ function const_prop_methodinstance_heuristic(interp::AbstractInterpreter,
         end
     end
     return false # the cache isn't inlineable, so this constant-prop' will most likely be unfruitful
+end
+
+# check if constant information is available on any call argument that has been analyzed as
+# const-prop' profitable
+function any_const_prop_profitable_args(effects::Effects, argtypes::Vector{Any})
+    if effects.const_prop_profitable_args === NO_PROFITABLE_ARGS
+        return false
+    end
+    for i in 1:length(argtypes)
+        ai = widenconditional(argtypes[i])
+        if isa(ai, Const) && is_const_prop_profitable_arg(effects, i)
+            return true
+        end
+    end
+    return false
 end
 
 # This is only for use with `Conditional`.
@@ -1901,11 +1943,10 @@ function abstract_invoke(interp::AbstractInterpreter, (; fargs, argtypes)::ArgIn
             (; rt, effects, const_result, edge) = const_call_result
         end
     end
-    rt = from_interprocedural!(𝕃ₚ, rt, sv, arginfo, sig)
     effects = Effects(effects; nonoverlayed=!overlayed)
-    info = InvokeCallInfo(match, const_result)
+    (; rt, effects) = from_interprocedural!(𝕃ₚ, rt, effects, sv, arginfo, sig)
     edge !== nothing && add_invoke_backedge!(sv, lookupsig, edge)
-    return CallMeta(rt, effects, info)
+    return CallMeta(rt, effects, InvokeCallInfo(match, const_result))
 end
 
 function invoke_rewrite(xs::Vector{Any})
@@ -2015,6 +2056,20 @@ function abstract_call_known(interp::AbstractInterpreter, @nospecialize(f),
         return CallMeta(typename_static(argtypes[2]), EFFECTS_TOTAL, MethodResultPure())
     elseif f === Core._hasmethod
         return _hasmethod_tfunc(interp, argtypes, sv)
+    elseif la == 2 && istoptype(f, :Val)
+        # `Val` generally encodes constant information into the type domain, so there is
+        # generally a high profitability for constant propagation if the argument of the
+        # `Val` constructor is a call argument
+        fargs = arginfo.fargs
+        if fargs !== nothing
+            arg = arginfo.fargs[2]
+            if is_call_argument(arg, sv) && !isempty(sv.ssavalue_uses[sv.currpc])
+                if 1 ≤ slot_id(arg) ≤ 8
+                    const_prop_profitable_args = ConstPropProfitableArgs(0x01 << (slot_id(arg)-1))
+                    merge_effects!(interp, sv, Effects(EFFECTS_TOTAL; const_prop_profitable_args))
+                end
+            end
+        end
     end
     atype = argtypes_to_type(argtypes)
     return abstract_call_gf_by_type(interp, f, arginfo, si, atype, sv, max_methods)
@@ -2048,7 +2103,7 @@ function abstract_call_opaque_closure(interp::AbstractInterpreter,
             effects = Effects(effects; nothrow=false)
         end
     end
-    rt = from_interprocedural!(𝕃ₚ, rt, sv, arginfo, match.spec_types)
+    (; rt, effects) = from_interprocedural!(𝕃ₚ, rt, effects, sv, arginfo, match.spec_types)
     info = OpaqueClosureCallInfo(match, const_result)
     edge !== nothing && add_backedge!(sv, edge)
     return CallMeta(rt, effects, info)
@@ -2481,8 +2536,7 @@ function abstract_eval_foreigncall(interp::AbstractInterpreter, e::Expr, vtypes:
             override.terminates_globally ? true        : effects.terminates,
             override.notaskstate         ? true        : effects.notaskstate,
             override.inaccessiblememonly ? ALWAYS_TRUE : effects.inaccessiblememonly,
-            effects.nonoverlayed,
-            effects.noinbounds)
+            effects.nonoverlayed, effects.noinbounds, effects.const_prop_profitable_args)
     end
     return RTEffects(t, effects)
 end
@@ -2865,6 +2919,15 @@ function typeinf_local(interp::AbstractInterpreter, frame::InferenceState)
                     @goto branch
                 elseif isa(stmt, GotoIfNot)
                     condx = stmt.cond
+                    if is_call_argument(condx, frame)
+                        # if this condition object is a call argument, there will be a high
+                        # profitability for constant-propagating it, since it can shape up
+                        # the generated code by cutting off the dead branch entirely
+                        if 1 ≤ slot_id(condx) ≤ 8
+                            const_prop_profitable_args = ConstPropProfitableArgs(0x01 << (slot_id(condx)-1))
+                            merge_effects!(interp, frame, Effects(EFFECTS_TOTAL; const_prop_profitable_args))
+                        end
+                    end
                     condt = abstract_eval_value(interp, condx, currstate, frame)
                     if condt === Bottom
                         ssavaluetypes[currpc] = Bottom
