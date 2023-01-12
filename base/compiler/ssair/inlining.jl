@@ -824,8 +824,9 @@ compileable_specialization(result::InferenceResult, args...; kwargs...) = (@nosp
 
 struct CachedResult
     src::Any
+    rt::Any
     effects::Effects
-    CachedResult(@nospecialize(src), effects::Effects) = new(src, effects)
+    CachedResult(@nospecialize(src), @nospecialize(rt), effects::Effects) = new(src, rt, effects)
 end
 @inline function get_cached_result(state::InliningState, mi::MethodInstance)
     code = get(code_cache(state), mi, nothing)
@@ -836,10 +837,11 @@ end
         else
             src = @atomic :monotonic code.inferred
         end
+        rt = code.rettype
         effects = decode_effects(code.ipo_purity_bits)
-        return CachedResult(src, effects)
+        return CachedResult(src, rt, effects)
     end
-    return CachedResult(nothing, Effects())
+    return CachedResult(nothing, Any, Effects())
 end
 
 # the general resolver for usual and const-prop'ed calls
@@ -851,6 +853,7 @@ function resolve_todo(mi::MethodInstance, result::Union{MethodMatch,InferenceRes
     #XXX: update_valid_age!(min_valid[1], max_valid[1], sv)
     if isa(result, InferenceResult)
         src = result.src
+        rt = result.result
         effects = result.ipo_effects
         if is_foldable_nothrow(effects)
             res = result.result
@@ -866,7 +869,7 @@ function resolve_todo(mi::MethodInstance, result::Union{MethodMatch,InferenceRes
             add_inlining_backedge!(et, mi)
             return cached_result
         end
-        (; src, effects) = cached_result
+        (; src, effects, rt) = cached_result
     end
 
     # the duplicated check might have been done already within `analyze_method!`, but still
@@ -876,7 +879,9 @@ function resolve_todo(mi::MethodInstance, result::Union{MethodMatch,InferenceRes
             compilesig_invokes=OptimizationParams(state.interp).compilesig_invokes)
     end
 
-    src = inlining_policy(state.interp, src, info, flag, mi, argtypes)
+    iinfo = InlineCallInfo(rt, mi, argtypes, info, flag)
+    src = inlining_policy(state.interp, src, iinfo)
+
     src === nothing && return compileable_specialization(result, effects, et, info;
         compilesig_invokes=OptimizationParams(state.interp).compilesig_invokes)
 
@@ -898,9 +903,10 @@ function resolve_todo(mi::MethodInstance, argtypes::Vector{Any},
         add_inlining_backedge!(et, mi)
         return cached_result
     end
-    (; src, effects) = cached_result
+    (; src, rt, effects) = cached_result
 
-    src = inlining_policy(state.interp, src, info, flag, mi, argtypes)
+    iinfo = InlineCallInfo(rt, mi, argtypes, info, flag)
+    src = inlining_policy(state.interp, src, iinfo)
 
     src === nothing && return nothing
 
@@ -1296,9 +1302,9 @@ function handle_any_const_result!(cases::Vector{InliningCase},
     allow_abstract::Bool, allow_typevars::Bool)
     if isa(result, ConcreteResult)
         return handle_concrete_result!(cases, result, info, state)
-    end
-    if isa(result, SemiConcreteResult)
-        result = inlining_policy(state.interp, result, info, flag, result.mi, argtypes)
+    elseif isa(result, SemiConcreteResult)
+        iinfo = InlineCallInfo(result.rt, result.mi, argtypes, info, flag)
+        result = inlining_policy(state.interp, result, iinfo)
         if isa(result, SemiConcreteResult)
             return handle_semi_concrete_result!(cases, result, info, flag, state; allow_abstract)
         end
@@ -1545,7 +1551,8 @@ function handle_opaque_closure_call!(todo::Vector{Pair{Int,Any}},
         item = concrete_result_item(result, info, state)
     else
         if isa(result, SemiConcreteResult)
-            result = inlining_policy(state.interp, result, info, flag, result.mi, sig.argtypes)
+            iinfo = InlineCallInfo(result.rt, result.mi, sig.argtypes, info, flag)
+            result = inlining_policy(state.interp, result, iinfo)
         end
         if isa(result, SemiConcreteResult)
             item = semiconcrete_result_item(result, info, flag, state)
