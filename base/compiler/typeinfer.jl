@@ -326,13 +326,23 @@ function CodeInstance(interp::AbstractInterpreter, result::InferenceResult,
     relocatability = isa(inferred_result, Vector{UInt8}) ? inferred_result[end] :
                      inferred_result === nothing ? UInt8(1) : UInt8(0)
     # relocatability = isa(inferred_result, Vector{UInt8}) ? inferred_result[end] : UInt8(0)
+    precompile = false
+    if isa(interp, NativeInterpreter)
+        if inferred_result !== nothing
+            src = inferred_result::MaybeCompressed
+            iinfo = InlineeInfo(result_type, result.linfo)
+            if !is_inlineable(interp, src, iinfo)
+                precompile = true
+            end
+        end
+    end
     ipo_effects = effects = encode_effects(result.ipo_effects)
     return CodeInstance(result.linfo,
         widenconst(result_type), rettype_const, inferred_result,
         const_flags, first(valid_worlds), last(valid_worlds),
         # TODO: Actually do something with non-IPO effects
-	    encode_effects(result.ipo_effects), encode_effects(result.ipo_effects), result.argescapes,
-        relocatability)
+        ipo_effects, effects, result.argescapes,
+        relocatability, precompile)
 end
 
 function maybe_compress_codeinfo(interp::AbstractInterpreter, mi::MethodInstance, ci::CodeInfo)
