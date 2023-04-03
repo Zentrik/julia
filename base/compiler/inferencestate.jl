@@ -854,7 +854,11 @@ function should_infer_this_call(interp::AbstractInterpreter, sv::InferenceState)
 end
 function should_infer_for_effects(sv::InferenceState)
     effects = sv.ipo_effects
-    return is_terminates(effects) && is_effect_free(effects)
+    effects.consistent === ALWAYS_FALSE && return false
+    effects.effect_free === ALWAYS_FALSE && return false
+    effects.terminates || return false
+    effects.nonoverlayed || return false
+    return true
 end
 should_infer_this_call(::AbstractInterpreter, ::IRInterpretationState) = true
 
