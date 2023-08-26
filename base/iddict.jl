@@ -156,14 +156,16 @@ length(d::IdDict) = d.count
 copy(d::IdDict) = typeof(d)(d)
 
 function get!(d::IdDict{K,V}, @nospecialize(key), @nospecialize(default)) where {K, V}
-    val = ccall(:jl_eqtable_get, Any, (Any, Any, Any), d.ht, key, secret_table_token)
-    if val === secret_table_token
-        val = isa(default, V) ? default : convert(V, default)::V
-        setindex!(d, val, key)
-        return val
-    else
-        return val::V
+    !isa(key, K) && throw(ArgumentError("$(limitrepr(key)) is not a valid key for type $K"))
+    val = isa(default, V) ? default : convert(V, default)::V
+    if d.ndel >= ((3*length(d.ht))>>2)
+        rehash!(d, max((length(d.ht)%UInt)>>1, 32))
+        d.ndel = 0
     end
+    inserted = RefValue{Cint}(0)
+    ret = ccall(:jl_eqtable_get_inplace, Any, (Any, Any, Any, Ptr{Cint}), d.ht, key, val, inserted)
+    d.count += inserted[]
+    return ret
 end
 
 function get(default::Callable, d::IdDict{K,V}, @nospecialize(key)) where {K, V}
@@ -176,17 +178,19 @@ function get(default::Callable, d::IdDict{K,V}, @nospecialize(key)) where {K, V}
 end
 
 function get!(default::Callable, d::IdDict{K,V}, @nospecialize(key)) where {K, V}
-    val = ccall(:jl_eqtable_get, Any, (Any, Any, Any), d.ht, key, secret_table_token)
-    if val === secret_table_token
-        val = default()
-        if !isa(val, V)
-            val = convert(V, val)::V
-        end
-        setindex!(d, val, key)
-        return val
-    else
-        return val::V
+    !isa(key, K) && throw(ArgumentError("$(limitrepr(key)) is not a valid key for type $K"))
+    val = default()
+    if !isa(val, V)
+        val = convert(V, val)::V
     end
+    if d.ndel >= ((3*length(d.ht))>>2)
+        rehash!(d, max((length(d.ht)%UInt)>>1, 32))
+        d.ndel = 0
+    end
+    inserted = RefValue{Cint}(0)
+    ret = ccall(:jl_eqtable_get_inplace, Any, (Any, Any, Any, Ptr{Cint}), d.ht, key, val, inserted)
+    d.count += inserted[]
+    return ret
 end
 
 in(@nospecialize(k), v::KeySet{<:Any,<:IdDict}) = get(v.dict, k, secret_table_token) !== secret_table_token
