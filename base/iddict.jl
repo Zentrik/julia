@@ -132,8 +132,8 @@ function delete!(d::IdDict{K}, @nospecialize(key)) where K
     d
 end
 
-function empty!(d::IdDict)
-    resize!(d.ht, 32)
+function empty!(d::IdDict; preserve_size=false)
+    preserve_size || resize!(d.ht, 32)
     ht = d.ht
     t = @_gc_preserve_begin ht
     memset(unsafe_convert(Ptr{Cvoid}, ht), 0, sizeof(ht))
@@ -153,17 +153,29 @@ end
 
 length(d::IdDict) = d.count
 
+isempty(d::IdDict) = length(d) == 0
+
 copy(d::IdDict) = typeof(d)(d)
 
 function get!(d::IdDict{K,V}, @nospecialize(key), @nospecialize(default)) where {K, V}
-    val = ccall(:jl_eqtable_get, Any, (Any, Any, Any), d.ht, key, secret_table_token)
-    if val === secret_table_token
-        val = isa(default, V) ? default : convert(V, default)::V
-        setindex!(d, val, key)
-        return val
+    !isa(key, K) && throw(ArgumentError("$(limitrepr(key)) is not a valid key for type $K"))
+    val = if !isa(default, V)
+        try
+            convert(V, default)::V
+        catch
+            res = ccall(:jl_eqtable_get, Any, (Any, Any, Any), d.ht, key, secret_table_token)
+            res === secret_table_token && rethrow()
+            return res::V
+        end
     else
-        return val::V
+        default
     end
+    if d.ndel >= ((3*length(d.ht))>>2)
+        rehash!(d, max((length(d.ht)%UInt)>>1, 32))
+        d.ndel = 0
+    end
+    ret = ccall(:jl_eqtable_get_inplace, Any, (Any, Any, Any), d, key, val)::V
+    return ret
 end
 
 function get(default::Callable, d::IdDict{K,V}, @nospecialize(key)) where {K, V}
@@ -176,17 +188,23 @@ function get(default::Callable, d::IdDict{K,V}, @nospecialize(key)) where {K, V}
 end
 
 function get!(default::Callable, d::IdDict{K,V}, @nospecialize(key)) where {K, V}
-    val = ccall(:jl_eqtable_get, Any, (Any, Any, Any), d.ht, key, secret_table_token)
-    if val === secret_table_token
-        val = default()
-        if !isa(val, V)
+    !isa(key, K) && throw(ArgumentError("$(limitrepr(key)) is not a valid key for type $K"))
+    val = default()
+    if !isa(val, V)
+        try
             val = convert(V, val)::V
+        catch
+            res = ccall(:jl_eqtable_get, Any, (Any, Any, Any), d.ht, key, secret_table_token)
+            res === secret_table_token && rethrow()
+            return res::V
         end
-        setindex!(d, val, key)
-        return val
-    else
-        return val::V
     end
+    if d.ndel >= ((3*length(d.ht))>>2)
+        rehash!(d, max((length(d.ht)%UInt)>>1, 32))
+        d.ndel = 0
+    end
+    ret = ccall(:jl_eqtable_get_inplace, Any, (Any, Any, Any), d, key, val)::V
+    return ret
 end
 
 in(@nospecialize(k), v::KeySet{<:Any,<:IdDict}) = get(v.dict, k, secret_table_token) !== secret_table_token

@@ -1,5 +1,7 @@
 // This file is a part of Julia. License is MIT: https://julialang.org/license
 
+#include "julia.h"
+
 #define hash_size(h) (jl_array_len(h) / 2)
 
 // compute empirical max-probe for a given size
@@ -190,6 +192,91 @@ size_t jl_eqtable_nextind(jl_array_t *t, size_t i)
     if (i >= alen)
         return (size_t)-1;
     return i;
+}
+
+JL_DLLEXPORT
+jl_value_t *jl_eqtable_get_inplace(jl_value_t *d, jl_value_t *key, jl_value_t *val)
+{
+    jl_id_dict_t *dict = (jl_id_dict_t*)d;
+    jl_array_t *h = dict->ht; //jl_get_field(d, "ht");
+    jl_array_t **pa = &h;
+    // pa points to a **un**rooted address
+    uint_t hv;
+    jl_array_t *a = *pa;
+    size_t orig, index, iter, empty_slot;
+    size_t newsz, sz = hash_size(a);
+    if (sz == 0) {
+        a = jl_alloc_vec_any(HT_N_INLINE);
+        sz = hash_size(a);
+        *pa = a;
+    }
+    size_t maxprobe = max_probe(sz);
+    _Atomic(jl_value_t*) *tab = (_Atomic(jl_value_t*)*)a->data;
+
+    hv = keyhash(key);
+    while (1) {
+        iter = 0;
+        index = h2index(hv, sz);
+        sz *= 2;
+        orig = index;
+        empty_slot = -1;
+
+        do {
+            jl_value_t *k2 = jl_atomic_load_relaxed(&tab[index]);
+            if (k2 == NULL) {
+                if (empty_slot == -1)
+                    empty_slot = index;
+                break;
+            }
+            if (jl_egal(key, k2)) {
+                if (jl_atomic_load_relaxed(&tab[index + 1]) != NULL) {
+                    jl_atomic_store_release(&dict->ht, h);
+                    jl_gc_wb(d, h);
+                    return jl_atomic_load_relaxed(&tab[index + 1]);
+                }
+                // `nothing` is our sentinel value for deletion, so need to keep searching if it's also our search key
+                assert(key == jl_nothing);
+                if (empty_slot == -1)
+                    empty_slot = index;
+            }
+            if (empty_slot == -1 && jl_atomic_load_relaxed(&tab[index + 1]) == NULL) {
+                assert(jl_atomic_load_relaxed(&tab[index]) == jl_nothing);
+                empty_slot = index;
+            }
+
+            index = (index + 2) & (sz - 1);
+            iter++;
+        } while (iter <= maxprobe && index != orig);
+
+        if (empty_slot != -1) {
+            jl_atomic_store_release(&tab[empty_slot], key);
+            jl_gc_wb(a, key);
+            jl_atomic_store_release(&tab[empty_slot + 1], val);
+            jl_gc_wb(a, val);
+            jl_atomic_store_release(&dict->count, dict->count+1);
+            jl_atomic_store_release(&dict->ht, h);
+            jl_gc_wb(d, h);
+            return val;
+        }
+
+        /* table full */
+        /* quadruple size, rehash, retry the insert */
+        /* it's important to grow the table really fast; otherwise we waste */
+        /* lots of time rehashing all the keys over and over. */
+        sz = jl_array_len(a);
+        if (sz < HT_N_INLINE)
+            newsz = HT_N_INLINE;
+        else if (sz >= (1 << 19) || (sz <= (1 << 8)))
+            newsz = sz << 1;
+        else
+            newsz = sz << 2;
+        *pa = jl_idtable_rehash(*pa, newsz);
+
+        a = *pa;
+        tab = (_Atomic(jl_value_t*)*)a->data;
+        sz = hash_size(a);
+        maxprobe = max_probe(sz);
+    }
 }
 
 #undef hash_size
