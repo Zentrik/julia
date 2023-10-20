@@ -1294,14 +1294,21 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
     case unsafe_alloca: {
         assert(nargs == 2);
 
-        jl_value_t *jl_eltype = (jl_value_t*)staticeval_bitstype(argv[0]);
+        // from staticeval_bitstype
+        jl_value_t *jl_eltype;
+        jl_value_t *unw = jl_unwrap_unionall(argv[0].typ);
+        if (jl_is_type_type(unw)) {
+            jl_eltype = jl_tparam0(unw);
+        } else {
+            // it's easier to throw a good error from C than llvm
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
+        }
+
         const jl_cgval_t &jl_length = argv[1];
 
-        // it's easier to throw a good error from C than llvm
-        if (!jl_eltype)
-            return emit_runtime_call(ctx, f, argv.data(), nargs);
-
-        Type *eltype = bitstype_to_llvm(jl_eltype, ctx.builder.getContext(), true);
+        Type *eltype = julia_type_to_llvm(ctx, jl_eltype, NULL); // llvmcall = true so bools are going to give Int8s
+        // Type *eltype = _julia_struct_to_llvm(ctx, jl_eltype, NULL, true);
+        // Type *eltype = bitstype_to_llvm(jl_eltype, ctx.builder.getContext(), true);
 
         Value *loc;
         Constant *c = jl_length.constant ? julia_const_to_llvm(ctx, jl_length.constant) : NULL;
