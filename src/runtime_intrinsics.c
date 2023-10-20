@@ -1505,3 +1505,9 @@ JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *typ)
     // TODO: run-time feature check?
     return jl_false;
 }
+
+
+JL_DLLEXPORT jl_value_t *jl_unsafe_alloca(jl_value_t *type, jl_value_t *len)
+{
+    jl_exceptionf(jl_argumenterror_type, "Unsafe alloca failed?");
+}

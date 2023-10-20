@@ -1371,6 +1371,8 @@ JL_DLLEXPORT jl_value_t *jl_checked_udiv_int(jl_value_t *a, jl_value_t *b);
 JL_DLLEXPORT jl_value_t *jl_checked_srem_int(jl_value_t *a, jl_value_t *b);
 JL_DLLEXPORT jl_value_t *jl_checked_urem_int(jl_value_t *a, jl_value_t *b);
 
+JL_DLLEXPORT jl_value_t *jl_unsafe_alloca(jl_value_t *type, jl_value_t *len);
+
 JL_DLLEXPORT jl_value_t *jl_ceil_llvm(jl_value_t *a);
 JL_DLLEXPORT jl_value_t *jl_floor_llvm(jl_value_t *a);
 JL_DLLEXPORT jl_value_t *jl_trunc_llvm(jl_value_t *a);

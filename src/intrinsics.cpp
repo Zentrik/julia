@@ -1291,6 +1291,76 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         return mark_julia_type(ctx, ans, false, x.typ);
     }
 
+    case unsafe_alloca: {
+        assert(nargs == 2);
+        // if (!argv[1].constant)// || !argv[2].constant)
+        //     return emit_runtime_call(ctx, f, argv.data(), nargs);
+
+        // jl_value_t *eltype = argv[0].constant;
+        // jl_value_t *length = argv[1].constant;
+        // JL_TYPECHK(typeassert, type, eltype);
+
+        // Type* type = bitstype_to_llvm(eltype, ctx.builder.getContext(), true);
+
+        // Type *arrayType;
+        // // arrayType = ArrayType::get(type, 2);
+        // if (jl_typeis(length, jl_int64_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_int64(length));
+        // } else if (jl_typeis(length, jl_uint64_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_uint64(length));
+        // } else if (jl_typeis(length, jl_int32_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_int32(length));
+        // } else if (jl_typeis(length, jl_uint32_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_uint32(length));
+        // } else if (jl_typeis(length, jl_int16_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_int16(length));
+        // } else if (jl_typeis(length, jl_uint16_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_uint16(length));
+        // } else if (jl_typeis(length, jl_int8_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_int8(length));
+        // } else if (jl_typeis(length, jl_uint8_type)) {
+        //     arrayType = ArrayType::get(type, jl_unbox_uint8(length));
+        // } else {
+        //     jl_exceptionf(jl_argumenterror_type, "length must be a 8/16/32 or 64 bit integer");
+        // }
+
+        // Constant *size = args[1]->constant ? julia_const_to_llvm(ctx, args[1]->constant) : NULL;
+
+        // Value *loc = (Value*)emit_static_alloca(ctx, arrayType);
+        // Value *loc = new AllocaInst(arrayType, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), "", /*InsertBefore=*/ctx.topalloca);
+        // Value *loc = ctx.builder.CreateAlloca(arrayType);
+
+        jl_value_t *jl_eltype = (jl_value_t*)staticeval_bitstype(argv[0]);
+
+        // it's easier to throw a good error from C than llvm
+        if (!jl_eltype)
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
+            // return emit_runtime_call(ctx, bitcast, argv, 2);
+
+        Type *eltype = bitstype_to_llvm(jl_eltype, ctx.builder.getContext(), true);
+
+        Value *length = emit_unbox(ctx, ctx.types().T_size, argv[1], argv[1].typ);
+        // Value *length = emit_unbox(ctx, ctx.types().T_size, argv[1], (jl_value_t*)jl_long_type);
+        Value * loc = ctx.builder.CreateAlloca(eltype, length);
+
+        // Value *loc = ctx.builder.CreateAlloca(arrayType, );
+
+        // ++EmittedAllocas;
+        // AllocaInst(lty, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), "", /*InsertBefore=*/ctx.topalloca);
+
+        // (jl_value_t*)jl_voidpointer_type
+        jl_value_t *rt = (jl_value_t*)jl_apply_type1((jl_value_t*)jl_pointer_type, jl_eltype);
+        // return jl_cgval_t(loc, rt, NULL);
+        // llvm_dump(ctx.f);
+        return mark_julia_type(ctx, loc, false, rt);
+        // return mark_julia_slot(loc, rt, NULL, ctx.tbaa().tbaa_stack);
+
+
+        // if (newtyp == (jl_value_t*)jl_bool_type && !r->getType()->isIntegerTy(1))
+        //     r = ctx.builder.CreateTrunc(r, getInt1Ty(ctx.builder.getContext()));
+        // return mark_julia_type(ctx, r, false, newtyp);
+    }
+
     case have_fma: {
         ++Emitted_have_fma;
         assert(nargs == 1);

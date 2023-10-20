@@ -52,7 +52,7 @@ end
 
 const INT_INF = typemax(Int) # integer infinity
 
-const N_IFUNC = reinterpret(Int32, have_fma) + 1
+const N_IFUNC = reinterpret(Int32, unsafe_alloca) + 1
 const T_IFUNC = Vector{Tuple{Int, Int, Any}}(undef, N_IFUNC)
 const T_IFUNC_COST = Vector{Int}(undef, N_IFUNC)
 const T_FFUNC_KEY = Vector{Any}()
@@ -304,6 +304,24 @@ add_tfunc(Core.Intrinsics.cglobal, 1, 2, cglobal_tfunc, 5)
 
 add_tfunc(Core.Intrinsics.have_fma, 1, 1, @nospecs((𝕃::AbstractLattice, x)->Bool), 1)
 add_tfunc(Core.Intrinsics.arraylen, 1, 1, @nospecs((𝕃::AbstractLattice, x)->Int), 4)
+
+@nospecs unsafe_alloca_tfunc(𝕃::AbstractLattice, t, x) = unsafe_alloca_tfunc(widenlattice(𝕃), t, x)
+@nospecs function unsafe_alloca_tfunc(::JLTypeLattice, t, x)
+    T = instanceof_tfunc(t, true)[1]
+    return T === Bottom ? Bottom : Ptr{T} # if T == Union{Int, Float64} surely we want Union{Ptr..., Ptr...} instead of Ptr{Union{...}}
+end
+
+# @nospecs function unsafe_alloca_tfunc(::AbstractLattice, x, y)
+#     if isa(x, Const) && isa(y, Const)
+#         T = x.val
+#         length = y.val
+#         if isa(T, Type) && isa(length, Union{Int64, UInt64, Int32, UInt32})
+#             return Ptr{T}
+#         end
+#     end
+#     Bottom
+# end
+add_tfunc(Core.Intrinsics.unsafe_alloca, 2, 2, unsafe_alloca_tfunc, 0)
 
 # builtin functions
 # =================
@@ -2544,6 +2562,7 @@ function intrinsic_nothrow(f::IntrinsicFunction, argtypes::Vector{Any})
     # TODO: We can't know for sure, but the user should have a way to assert
     # that it won't
     f === Intrinsics.llvmcall && return false
+    f === Intrinsics.unsafe_alloca && return false
     if f === Intrinsics.checked_udiv_int || f === Intrinsics.checked_urem_int || f === Intrinsics.checked_srem_int || f === Intrinsics.checked_sdiv_int
         # Nothrow as long as the second argument is guaranteed not to be zero
         arg2 = argtypes[2]
@@ -2610,6 +2629,7 @@ function is_pure_intrinsic_infer(f::IntrinsicFunction)
     return !(f === Intrinsics.pointerref || # this one is volatile
              f === Intrinsics.pointerset || # this one is never effect-free
              f === Intrinsics.llvmcall ||   # this one is never effect-free
+             f === Intrinsics.unsafe_alloca ||
              f === Intrinsics.arraylen ||   # this one is volatile
              f === Intrinsics.sqrt_llvm_fast ||  # this one may differ at runtime (by a few ulps)
              f === Intrinsics.have_fma ||  # this one depends on the runtime environment
@@ -2626,6 +2646,9 @@ end
 function intrinsic_effects(f::IntrinsicFunction, argtypes::Vector{Any})
     if f === Intrinsics.llvmcall
         # llvmcall can do arbitrary things
+        return Effects()
+    end
+    if f === Intrinsics.unsafe_alloca
         return Effects()
     end
 
