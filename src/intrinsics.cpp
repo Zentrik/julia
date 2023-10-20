@@ -1295,18 +1295,22 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         assert(nargs == 2);
 
         jl_value_t *jl_eltype = (jl_value_t*)staticeval_bitstype(argv[0]);
+        const jl_cgval_t &jl_length = argv[1];
 
         // it's easier to throw a good error from C than llvm
         if (!jl_eltype)
             return emit_runtime_call(ctx, f, argv.data(), nargs);
 
         Type *eltype = bitstype_to_llvm(jl_eltype, ctx.builder.getContext(), true);
-        Value *length = emit_unbox(ctx, ctx.types().T_size, argv[1], argv[1].typ);
+
+        Type *length_type = INTT(bitstype_to_llvm(jl_length.typ, ctx.builder.getContext(), true), DL);
+        Value *length = emit_unbox(ctx, length_type, jl_length, jl_length.typ);
 
         // Is address space correct? emit_static_alloca doesn't seem to work here but probably is a correct implementation
-        Value * loc = ctx.builder.CreateAlloca(eltype, length);
+        Value *loc = ctx.builder.CreateAlloca(eltype, length);
 
         jl_value_t *rt = (jl_value_t*)jl_apply_type1((jl_value_t*)jl_pointer_type, jl_eltype);
+        // should this be mark_julia_slot
         return mark_julia_type(ctx, loc, false, rt);
     }
 
