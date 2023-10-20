@@ -1306,9 +1306,7 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
 
         const jl_cgval_t &jl_length = argv[1];
 
-        Type *eltype = julia_type_to_llvm(ctx, jl_eltype, NULL); // llvmcall = true so bools are going to give Int8s
-        // Type *eltype = _julia_struct_to_llvm(ctx, jl_eltype, NULL, true);
-        // Type *eltype = bitstype_to_llvm(jl_eltype, ctx.builder.getContext(), true);
+        Type *eltype = julia_type_to_llvm(ctx, jl_eltype, NULL);
 
         Value *loc;
         Constant *c = jl_length.constant ? julia_const_to_llvm(ctx, jl_length.constant) : NULL;
