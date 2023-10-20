@@ -307,19 +307,13 @@ add_tfunc(Core.Intrinsics.arraylen, 1, 1, @nospecs((𝕃::AbstractLattice, x)->I
 
 @nospecs unsafe_alloca_tfunc(𝕃::AbstractLattice, t, x) = unsafe_alloca_tfunc(widenlattice(𝕃), t, x)
 @nospecs function unsafe_alloca_tfunc(::JLTypeLattice, t, x)
-    T = instanceof_tfunc(t, true)[1]
-    return T === Bottom ? Bottom : Ptr{T} # if T == Union{Int, Float64} surely we want Union{Ptr..., Ptr...} instead of Ptr{Union{...}}
+    T, isexact, isconcrete, istype = instanceof_tfunc(t, true)
+    return istype & isexact & isconcrete ? Ptr{T} : Bottom
 end
 
-# @nospecs function unsafe_alloca_tfunc(::AbstractLattice, x, y)
-#     if isa(x, Const) && isa(y, Const)
-#         T = x.val
-#         length = y.val
-#         if isa(T, Type) && isa(length, Union{Int64, UInt64, Int32, UInt32})
-#             return Ptr{T}
-#         end
-#     end
-#     Bottom
+# @nospecs function unsafe_alloca_tfunc(::AbstractLattice, t, l) # Type needs to be a known in codegen currently
+#     isa(t, Const) && return isa(t.val, Type) ? Ptr{t.val} : Bottom
+#     return isType(t) ? Ptr{t.parameters[1]} : Bottom
 # end
 add_tfunc(Core.Intrinsics.unsafe_alloca, 2, 2, unsafe_alloca_tfunc, 0)
 
