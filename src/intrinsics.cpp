@@ -1306,8 +1306,8 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         Type *length_type = INTT(bitstype_to_llvm(jl_length.typ, ctx.builder.getContext(), true), DL);
         Value *length = emit_unbox(ctx, length_type, jl_length, jl_length.typ);
 
-        // Is address space correct? emit_static_alloca doesn't seem to work here but probably is a correct implementation
-        Value *loc = ctx.builder.CreateAlloca(eltype, length);
+        // taken from emit_static_alloca
+        Value *loc = new AllocaInst(eltype, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), length, Align(jl_datatype_align(jl_eltype)), "",  /*InsertBefore=*/ctx.topalloca);
 
         jl_value_t *rt = (jl_value_t*)jl_apply_type1((jl_value_t*)jl_pointer_type, jl_eltype);
         // should this be mark_julia_slot
