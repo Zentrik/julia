@@ -126,9 +126,8 @@ of the Julia system image.
 Tuples:
 
 ```c
-jl_tuple_t *jl_tuple(size_t n, ...);
-jl_tuple_t *jl_tuplev(size_t n, jl_value_t **v);
-jl_tuple_t *jl_alloc_tuple(size_t n);
+jl_value_t *jl_apply_tuple_type(jl_svec_t *params, int check);
+jl_value_t *jl_apply_tuple_type_v(jl_value_t **p, size_t np);
 ```
 
 The representation of tuples is highly unique in the Julia object representation ecosystem. In
