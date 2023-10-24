@@ -1507,7 +1507,16 @@ JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *typ)
 }
 
 
-JL_DLLEXPORT jl_value_t *jl_unsafe_alloca(jl_value_t *type, jl_value_t *len)
+JL_DLLEXPORT jl_value_t *jl_unsafe_alloca(jl_value_t *typ, jl_value_t *len)
 {
-    jl_exceptionf(jl_argumenterror_type, "Unsafe alloca failed?");
+    JL_TYPECHK(unsafe_alloca, datatype, typ);
+
+    if (!jl_is_primitivetype(jl_typeof(len)))
+        jl_error("unsafe_alloca: length not a primitive type");
+
+    if (!jl_is_concrete_type(typ)) {
+        jl_error("unsafe_alloca: type argument not concrete");
+    }
+
+    jl_error("unsafe_alloca: type not known at compile time");
 }

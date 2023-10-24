@@ -1294,31 +1294,37 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
     case unsafe_alloca: {
         assert(nargs == 2);
 
+        const jl_cgval_t &jl_length = argv[1];
+
         // from staticeval_bitstype
         jl_value_t *jl_eltype;
         jl_value_t *unw = jl_unwrap_unionall(argv[0].typ);
-        if (jl_is_type_type(unw)) {
+        if (jl_is_type_type(unw) && argv[0].constant) {
             jl_eltype = jl_tparam0(unw);
         } else {
             // it's easier to throw a good error from C than llvm
             return emit_runtime_call(ctx, f, argv.data(), nargs);
         }
-
-        const jl_cgval_t &jl_length = argv[1];
+        if (!jl_is_datatype(jl_eltype) || !jl_is_concrete_type(jl_eltype) || !jl_is_primitivetype(jl_length.typ))
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
 
         Type *eltype = julia_type_to_llvm(ctx, jl_eltype, NULL);
 
-        Value *loc;
         Constant *c = jl_length.constant ? julia_const_to_llvm(ctx, jl_length.constant) : NULL;
+
+        size_t align = julia_alignment(jl_eltype);
+        align = align < 1 ? 1 : align;
+
+        Value *loc;
         if (c) {
             // taken from emit_static_alloca
-            loc = new AllocaInst(eltype, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), c, Align(jl_datatype_align(jl_eltype)), "",  /*InsertBefore=*/ctx.topalloca);
+            loc = new AllocaInst(eltype, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), c, Align(align), "",  /*InsertBefore=*/ctx.topalloca);
         } else {
             Type *length_type = INTT(bitstype_to_llvm(jl_length.typ, ctx.builder.getContext(), true), DL);
             Value *length = emit_unbox(ctx, length_type, jl_length, jl_length.typ);
 
             // taken from emit_static_alloca and CreateAlloca
-            loc = ctx.builder.Insert(new AllocaInst(eltype, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), length, Align(jl_datatype_align(jl_eltype))), "");
+            loc = ctx.builder.Insert(new AllocaInst(eltype, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), length, Align(align)), "");
         }
 
         jl_value_t *rt = (jl_value_t*)jl_apply_type1((jl_value_t*)jl_pointer_type, jl_eltype);
