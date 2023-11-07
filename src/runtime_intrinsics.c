@@ -1673,3 +1673,8 @@ JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *typ)
     // TODO: run-time feature check?
     return jl_false;
 }
+
+JL_DLLEXPORT jl_value_t *set_nthfield_through_ptr(jl_value_t *p, jl_value_t *x, jl_value_t *i, jl_value_t *align)
+{
+    return jl_false;
+}

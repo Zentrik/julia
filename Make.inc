@@ -10,9 +10,11 @@
 ## variable declarations. The spaces between the variable value and the
 ## comment will be included in the value.
 
+USECCACHE ?= 1
+
 # Julia precompilation options
 # Set to zero to turn off extra precompile (e.g. for the REPL)
-JULIA_PRECOMPILE ?= 1
+JULIA_PRECOMPILE ?= 0
 
 # Set FORCE_ASSERTIONS to 1 to enable assertions in the C and C++ portions
 # of the Julia code base. You may also want to set LLVM_ASSERTIONS to 1,
