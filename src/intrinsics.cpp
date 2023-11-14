@@ -1281,13 +1281,16 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         return mark_julia_type(ctx, ans, false, x.typ);
     }
 
-    case set_nthfield_through_ptr: {
-        assert(nargs == 3)
+    case set_nth_field_through_ptr: {
+        assert(nargs == 3);
 
         const jl_cgval_t &obj = argv[1];
         const jl_cgval_t &fld = argv[2];
-        const jl_cgval_t &val = argv[3];
+        jl_cgval_t &val = argv[3];
 
+        jl_datatype_t *uty = (jl_datatype_t*)jl_unwrap_unionall(obj.typ);
+
+        ssize_t idx = -1;
         if (fld.constant && jl_is_symbol(fld.constant)) {
             idx = jl_field_index(uty, (jl_sym_t*)fld.constant, 0);
         }
@@ -1296,8 +1299,17 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
             if (i > 0 && i <= (ssize_t)jl_datatype_nfields(uty))
                 idx = i - 1;
         } else {
-            emit_runtime_call(int &ctx, JL_I::intrinsic f, const int *argv, int nargs)
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
         }
+
+        if (idx == -1)
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
+
+        const std::string fname = "setfield_through_ptr";
+        bool ismodifyfield = false;
+        bool isswapfield = false;
+        bool isreplacefield = false;
+        bool issetfield = true;
 
         jl_value_t *ft = jl_field_type(uty, idx);
         if (!jl_has_free_typevars(ft)) {
@@ -1305,25 +1317,32 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
                 emit_typecheck(ctx, val, ft, fname);
                 val = update_julia_type(ctx, val, ft);
                 if (val.typ == jl_bottom_type)
-                    return true;
+                    return emit_runtime_call(ctx, f, argv.data(), nargs);
             }
             // TODO: attempt better codegen for approximate types
             bool isboxed = jl_field_isptr(uty, idx);
             bool isatomic = jl_field_isatomic(uty, idx);
             bool needlock = isatomic && !isboxed && jl_datatype_size(jl_field_type(uty, idx)) > MAX_ATOMIC_SIZE;
-        else {
-            emit_runtime_call()
-        }
-        return emit_setfield(ctx, uty, obj, idx, val, cmp, true,
-                            (needlock || order <= jl_memory_order_notatomic)
-                                ? AtomicOrdering::NotAtomic
-                                : get_llvm_atomic_order(order),
-                            (needlock || fail_order <= jl_memory_order_notatomic)
-                                ? AtomicOrdering::NotAtomic
-                                : get_llvm_atomic_order(fail_order),
-                            needlock, issetfield, isreplacefield, isswapfield, ismodifyfield,
-                            modifyop, fname);
 
+            enum jl_memory_order order = jl_memory_order_notatomic;
+            enum jl_memory_order fail_order = order;
+            const jl_cgval_t undefval;
+            const jl_cgval_t &cmp = isreplacefield || ismodifyfield ? argv[3] : undefval;
+            const jl_cgval_t *modifyop = nullptr;
+
+            return emit_setfield(ctx, uty, obj, idx, val, cmp, true,
+                                (needlock || order <= jl_memory_order_notatomic)
+                                    ? AtomicOrdering::NotAtomic
+                                    : get_llvm_atomic_order(order),
+                                (needlock || fail_order <= jl_memory_order_notatomic)
+                                    ? AtomicOrdering::NotAtomic
+                                    : get_llvm_atomic_order(fail_order),
+                                needlock, issetfield, isreplacefield, isswapfield, ismodifyfield,
+                                modifyop, fname);
+        } else {
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
+        }
+    }
     //     // const jl_cgval_t &e = argv[0];
     //     // const jl_cgval_t &x = argv[1];
     //     // const jl_cgval_t &i = argv[2];
