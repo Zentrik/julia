@@ -423,7 +423,7 @@ JL_DLLEXPORT void jl_set_nth_field_immutable(jl_value_t *v, size_t idx0, jl_valu
 }
 
 // optimization of setfield which bypasses boxing of the idx (and checking field type validity)
-JL_DLLEXPORT void jl_set_nth_field_through_ptr(jl_value_t * const*v, size_t idx0, jl_value_t *rhs)
+JL_DLLEXPORT void jl_set_nth_field_through_ptr_c(jl_value_t * const*v, size_t idx0, jl_value_t *rhs)
 {
     jl_datatype_t *st = (jl_datatype_t*)jl_typeof(*v);
     // if (idx0 >= jl_datatype_nfields(st))

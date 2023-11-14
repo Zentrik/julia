@@ -1314,6 +1314,9 @@ STATIC_INLINE int is_valid_intrinsic_elptr(jl_value_t *ety)
 JL_DLLEXPORT jl_value_t *jl_bitcast(jl_value_t *ty, jl_value_t *v);
 JL_DLLEXPORT jl_value_t *jl_pointerref(jl_value_t *p, jl_value_t *i, jl_value_t *align);
 JL_DLLEXPORT jl_value_t *jl_pointerset(jl_value_t *p, jl_value_t *x, jl_value_t *align, jl_value_t *i);
+JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *a);
+JL_DLLEXPORT jl_value_t *jl_set_nth_field_through_ptr(jl_value_t *p, jl_value_t *x, jl_value_t *i);
+
 JL_DLLEXPORT jl_value_t *jl_atomic_fence(jl_value_t *order);
 JL_DLLEXPORT jl_value_t *jl_atomic_pointerref(jl_value_t *p, jl_value_t *order);
 JL_DLLEXPORT jl_value_t *jl_atomic_pointerset(jl_value_t *p, jl_value_t *x, jl_value_t *order);

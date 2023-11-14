@@ -1684,7 +1684,7 @@ JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *typ)
         return jl_false;
 }
 
-JL_DLLEXPORT jl_value_t *set_nthfield_through_ptr(jl_value_t *p, jl_value_t *x, jl_value_t *i, jl_value_t *align)
+JL_DLLEXPORT jl_value_t *jl_set_nth_field_through_ptr(jl_value_t *p, jl_value_t *x, jl_value_t *i)
 {
     return jl_false;
 }
