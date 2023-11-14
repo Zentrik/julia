@@ -1610,3 +1610,13 @@ let d = Dict()
     d[1.0] = 'b'
     @test only(d) === Pair{Any,Any}(1.0, 'b')
 end
+
+# Check mutating IdDict during get! works
+let d = IdDict()
+    function f()
+        d[1] = 4
+        return -2
+    end
+    @test get!(f, d, 1) === -2
+    @test length(d) == 1
+end
