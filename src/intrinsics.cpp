@@ -1338,11 +1338,24 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
     case set_nth_field_through_ptr: {
         assert(nargs == 3);
 
-        const jl_cgval_t &obj = argv[1];
-        const jl_cgval_t &fld = argv[2];
-        jl_cgval_t &val = argv[3];
+        const jl_cgval_t &obj = argv[0];
+        const jl_cgval_t &fld = argv[1];
+        jl_cgval_t &val = argv[2];
 
-        jl_datatype_t *uty = (jl_datatype_t*)jl_unwrap_unionall(obj.typ);
+        // jl_datatype_t *uty = (jl_datatype_t*)jl_unwrap_unionall(obj.typ);
+
+        jl_value_t *aty = obj.typ;
+        if (!jl_is_cpointer_type(aty))
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
+        jl_value_t *ety = jl_tparam0(aty);
+        if (jl_is_typevar(ety))
+            return emit_runtime_call(ctx, f, argv.data(), nargs);
+        if (!is_valid_intrinsic_elptr(ety)) {
+            emit_error(ctx, "set_nth_field_through_ptr: invalid pointer type");
+            return jl_cgval_t();
+        }
+
+        jl_datatype_t* uty = (jl_datatype_t*)ety;
 
         ssize_t idx = -1;
         if (fld.constant && jl_is_symbol(fld.constant)) {
@@ -1384,18 +1397,48 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
             const jl_cgval_t &cmp = isreplacefield || ismodifyfield ? argv[3] : undefval;
             const jl_cgval_t *modifyop = nullptr;
 
-            return emit_setfield(ctx, uty, obj, idx, val, cmp, true,
-                                (needlock || order <= jl_memory_order_notatomic)
-                                    ? AtomicOrdering::NotAtomic
-                                    : get_llvm_atomic_order(order),
-                                (needlock || fail_order <= jl_memory_order_notatomic)
-                                    ? AtomicOrdering::NotAtomic
-                                    : get_llvm_atomic_order(fail_order),
-                                needlock, issetfield, isreplacefield, isswapfield, ismodifyfield,
-                                modifyop, fname);
-        } else {
-            return emit_runtime_call(ctx, f, argv.data(), nargs);
+            // isboxed = false;
+            // Type *ptrty = julia_type_to_llvm(ctx, ety, &isboxed);
+            // assert(!isboxed);
+            // if (!type_is_ghost(ptrty)) {
+            //     Value *thePtr = emit_unbox(ctx, ptrty->getPointerTo(), obj, obj.typ);
+
+            //     // maybe_mark_argument_dereferenceable(param, argType);
+            //     const jl_cgval_t theArg = mark_julia_slot(thePtr, (jl_value_t*)uty, NULL, ctx.tbaa().tbaa_data); // this argument is by-pointer
+
+            Value *thePtr;
+            if (uty == jl_any_type) {
+                // unsafe_store to Ptr{Any} is allowed to implicitly drop GC roots.
+                thePtr = emit_unbox(ctx, ctx.types().T_size->getPointerTo(), obj, obj.typ);
+            }
+            else if (val.ispointer()) {
+                thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), obj, obj.typ);
+            }
+            else {
+                bool isboxed;
+                Type *ptrty = julia_type_to_llvm(ctx, ety, &isboxed);
+                assert(!isboxed);
+                if (!type_is_ghost(ptrty)) {
+                    thePtr = emit_unbox(ctx, ptrty->getPointerTo(), obj, obj.typ);
+                } else {
+                    return emit_runtime_call(ctx, f, argv.data(), nargs);
+                }
+            }
+            const jl_cgval_t theArg = mark_julia_slot(thePtr, (jl_value_t*)uty, NULL, ctx.tbaa().tbaa_data); // this argument is by-pointer
+
+            emit_setfield(ctx, uty, theArg, (size_t)idx, val, cmp, false,
+                    (needlock || order <= jl_memory_order_notatomic)
+                        ? AtomicOrdering::NotAtomic
+                        : get_llvm_atomic_order(order),
+                    (needlock || fail_order <= jl_memory_order_notatomic)
+                        ? AtomicOrdering::NotAtomic
+                        : get_llvm_atomic_order(fail_order),
+                    needlock, issetfield, isreplacefield, isswapfield, ismodifyfield,
+                    modifyop, fname);
+                return obj;
+            // }
         }
+        return emit_runtime_call(ctx, f, argv.data(), nargs);
     }
     //     // const jl_cgval_t &e = argv[0];
     //     // const jl_cgval_t &x = argv[1];
