@@ -1281,7 +1281,7 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         return mark_julia_type(ctx, ans, false, x.typ);
     }
 
-    case set_nth_field_through_ptr: {
+    case setfield_through_ptr: {
         assert(nargs == 3);
 
         const jl_cgval_t &obj = argv[0];
@@ -1297,7 +1297,7 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         if (jl_is_typevar(ety))
             return emit_runtime_call(ctx, f, argv.data(), nargs);
         if (!is_valid_intrinsic_elptr(ety)) {
-            emit_error(ctx, "set_nth_field_through_ptr: invalid pointer type");
+            emit_error(ctx, "setfield_through_ptr: invalid pointer type");
             return jl_cgval_t();
         }
 
@@ -1319,10 +1319,10 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
             return emit_runtime_call(ctx, f, argv.data(), nargs);
 
         const std::string fname = "setfield_through_ptr";
-        bool ismodifyfield = false;
-        bool isswapfield = false;
-        bool isreplacefield = false;
-        bool issetfield = true;
+        const bool ismodifyfield = false;
+        const bool isswapfield = false;
+        const bool isreplacefield = false;
+        const bool issetfield = true;
 
         jl_value_t *ft = jl_field_type(uty, idx);
         if (!jl_has_free_typevars(ft)) {
