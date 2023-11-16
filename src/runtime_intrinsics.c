@@ -1676,5 +1676,5 @@ JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *typ)
 
 JL_DLLEXPORT jl_value_t *jl_set_nth_field_through_ptr(jl_value_t *p, jl_value_t *x, jl_value_t *i)
 {
-    return jl_false;
+    return NULL;
 }
