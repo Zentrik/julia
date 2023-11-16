@@ -52,7 +52,7 @@ end
 
 const INT_INF = typemax(Int) # integer infinity
 
-const N_IFUNC = reinterpret(Int32, set_nth_field_through_ptr) + 1
+const N_IFUNC = reinterpret(Int32, setfield_through_ptr) + 1
 const T_IFUNC = Vector{Tuple{Int, Int, Any}}(undef, N_IFUNC)
 const T_IFUNC_COST = Vector{Int}(undef, N_IFUNC)
 const T_FFUNC_KEY = Vector{Any}()
@@ -661,7 +661,7 @@ function pointer_eltype(@nospecialize(ptr))
     return Any
 end
 
-@nospecs function set_nth_field_through_ptr_tfunc(𝕃::AbstractLattice, a, v, i)
+@nospecs function setfield_through_ptr_tfunc(𝕃::AbstractLattice, a, v, i)
     return a
 end
 @nospecs function pointerref_tfunc(𝕃::AbstractLattice, a, i, align)
@@ -709,7 +709,7 @@ end
 end
 add_tfunc(pointerref, 3, 3, pointerref_tfunc, 4)
 add_tfunc(pointerset, 4, 4, pointerset_tfunc, 5)
-add_tfunc(set_nth_field_through_ptr, 3, 3, set_nth_field_through_ptr_tfunc, 4)
+add_tfunc(setfield_through_ptr, 3, 3, setfield_through_ptr_tfunc, 4)
 add_tfunc(atomic_fence, 1, 1, atomic_fence_tfunc, 4)
 add_tfunc(atomic_pointerref, 2, 2, atomic_pointerref_tfunc, 4)
 add_tfunc(atomic_pointerset, 3, 3, atomic_pointerset_tfunc, 5)

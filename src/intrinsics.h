@@ -101,7 +101,7 @@
     ALIAS(llvmcall, llvmcall) \
     /*  cpu feature tests */ \
     ADD_I(have_fma, 1) \
-    ADD_I(set_nth_field_through_ptr, 3) \
+    ADD_I(setfield_through_ptr, 3) \
     /*  hidden intrinsics */ \
     ADD_HIDDEN(cglobal_auto, 1)
 
