@@ -1684,57 +1684,58 @@ JL_DLLEXPORT jl_value_t *jl_have_fma(jl_value_t *typ)
         return jl_false;
 }
 
-// // run time version of pointerset intrinsic (warning: x is not gc-rooted)
-// JL_DLLEXPORT jl_value_t *jl_setfield_through_ptr(jl_value_t *p, jl_value_t *fld, jl_value_t *x)
-// {
-//     // jl_datatype_t *st = (jl_datatype_t*)jl_typeof(*v);
-//     // set_nth_field(st, *v, idx0, rhs, 0);
+// run time version of pointerset intrinsic (warning: x is not gc-rooted)
+JL_DLLEXPORT jl_value_t *jl_setfield_through_ptr(jl_value_t *p, jl_value_t *fld, jl_value_t *x)
+{
+    // jl_datatype_t *st = (jl_datatype_t*)jl_typeof(*v);
+    // set_nth_field(st, *v, idx0, rhs, 0);
 
-//     JL_TYPECHK(pointerset, pointer, p);
-//     // JL_TYPECHK(pointerset, long, i);
-//     jl_datatype_t *ety = (jl_datatype_t*)jl_tparam0(jl_typeof(p));
+    JL_TYPECHK(pointerset, pointer, p);
+    // JL_TYPECHK(pointerset, long, i);
+    jl_datatype_t *ety = (jl_datatype_t*)jl_tparam0(jl_typeof(p));
 
-//     jl_value_t **pp = (jl_value_t**)(jl_unbox_long(p));
+    // If boxed then (jl_value_t**)?
+    jl_value_t *pp = (jl_value_t*)(jl_unbox_long(p));
 
-//     // size_t idx = get_checked_fieldindex("setfield!", ety, *pp, fld, 0);
+    // size_t idx = get_checked_fieldindex("setfield!", ety, *pp, fld, 0);
 
-//     jl_datatype_t *st = ety;
-//     jl_value_t *v = *pp;
-//     jl_value_t *arg = fld;
-//     size_t idx;
-//     if (jl_is_long(arg)) {
-//         idx = jl_unbox_long(arg) - 1;
-//         if (idx >= jl_datatype_nfields(st))
-//             jl_bounds_error(v, arg);
-//     }
-//     else if (jl_is_symbol(arg)) {
-//         idx = jl_field_index(st, (jl_sym_t*)arg, 1);
-//     }
-//     else {
-//         jl_value_t *ts[2] = {(jl_value_t*)jl_long_type, (jl_value_t*)jl_symbol_type};
-//         jl_value_t *t = jl_type_union(ts, 2);
-//         jl_type_error("getfield", t, arg);
-//     }
+    jl_datatype_t *st = ety;
+    jl_value_t *v = pp;
+    jl_value_t *arg = fld;
+    size_t idx;
+    if (jl_is_long(arg)) {
+        idx = jl_unbox_long(arg) - 1;
+        if (idx >= jl_datatype_nfields(st))
+            jl_bounds_error(v, arg);
+    }
+    else if (jl_is_symbol(arg)) {
+        idx = jl_field_index(st, (jl_sym_t*)arg, 1);
+    }
+    else {
+        jl_value_t *ts[2] = {(jl_value_t*)jl_long_type, (jl_value_t*)jl_symbol_type};
+        jl_value_t *t = jl_type_union(ts, 2);
+        jl_type_error("getfield", t, arg);
+    }
 
-//     jl_value_t *ft = jl_field_type_concrete(ety, idx);
-//     if (!jl_isa(x, ft))
-//         jl_type_error("setfield_through_ptr!", ft, x);
+    jl_value_t *ft = jl_field_type_concrete(ety, idx);
+    if (!jl_isa(x, ft))
+        jl_type_error("setfield_through_ptr!", ft, x);
 
-//     set_nth_field(ety, *pp, idx, x, 0/*isatomic*/);
+    set_nth_field(ety, pp, idx, x, 0/*isatomic*/);
 
-//     // if (ety == (jl_value_t*)jl_any_type) {
-//     //     jl_value_t **pp = (jl_value_t**)(jl_unbox_long(p) + (jl_unbox_long(i)-1)*sizeof(void*));
-//     //     *pp = x;
-//     // }
-//     // else {
-//     //     if (!is_valid_intrinsic_elptr(ety))
-//     //         jl_error("setfield_through_ptr: invalid pointer");
-//     //     if (jl_typeof(x) != ety)
-//     //         jl_type_error("setfield_through_ptr", ety, x);
-//     //     size_t elsz = jl_datatype_size(ety);
-//     //     size_t nb = LLT_ALIGN(elsz, jl_datatype_align(ety));
-//     //     char *pp = (char*)jl_unbox_long(p) + (jl_unbox_long(i)-1)*nb;
-//     //     memcpy(pp, x, elsz);
-//     // }
-//     return p;
-// }
+    // if (ety == (jl_value_t*)jl_any_type) {
+    //     jl_value_t **pp = (jl_value_t**)(jl_unbox_long(p) + (jl_unbox_long(i)-1)*sizeof(void*));
+    //     *pp = x;
+    // }
+    // else {
+    //     if (!is_valid_intrinsic_elptr(ety))
+    //         jl_error("setfield_through_ptr: invalid pointer");
+    //     if (jl_typeof(x) != ety)
+    //         jl_type_error("setfield_through_ptr", ety, x);
+    //     size_t elsz = jl_datatype_size(ety);
+    //     size_t nb = LLT_ALIGN(elsz, jl_datatype_align(ety));
+    //     char *pp = (char*)jl_unbox_long(p) + (jl_unbox_long(i)-1)*nb;
+    //     memcpy(pp, x, elsz);
+    // }
+    return p;
+}
