@@ -1466,6 +1466,48 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         const jl_cgval_t &fld = argv[1];
         jl_cgval_t &val = argv[2];
 
+        // return value_to_pointer(ctx, obj);
+        // ctx.builder.CreateBitCast(
+        //                 decay_derived(ctx, data_pointer(ctx, value_to_pointer(ctx, obj))),
+        //                 T_pint8_derived)
+
+        Value* ptr = maybe_bitcast(ctx, data_pointer(ctx, value_to_pointer(ctx, obj)),
+            julia_type_to_llvm(ctx, obj.typ, nullptr)->getPointerTo());
+
+        jl_value_t *rt = (jl_value_t*)jl_apply_type1((jl_value_t*)jl_pointer_type, obj.typ);
+        return mark_julia_type(ctx, ptr, false, rt);
+        // return mark_julia_slot(ptr, obj.typ, nullptr, ctx.tbaa().tbaa_stack);
+
+        // jl_cgval_t strct = value_to_pointer(ctx, obj);
+        // size_t nfields = jl_datatype_nfields(stt);
+        // // bool maybe_null = (unsigned)stt->name->n_uninitialized != 0;
+        // Value *idx = emit_unbox(ctx, ctx.types().T_size, fld, (jl_value_t*)jl_long_type);
+        // auto idx0 = [&]() {
+        //     return emit_bounds_check(ctx, strct, jl_tparam0(aty), idx, ConstantInt::get(ctx.types().T_size, nfields), inbounds);
+        // };
+        // const std::string fname = "setfield_through_ptr";
+
+        // if (!strct.ispointer()) { // unboxed
+        //     if (is_tupletype_homogeneous(jl_get_fieldtypes(jl_tparam0(aty)))) {
+        //         jl_value_t *jft = jl_svecref(jl_tparam0(aty)->types, 0); // n.b. jl_get_fieldtypes assigned stt->types for here
+        //         assert(jl_is_concrete_type(jft));
+
+        //         emit_typecheck(ctx, rhs, jft, fname);
+        //         rhs = update_julia_type(ctx, rhs, jft);
+        //         if (rhs.typ == jl_bottom_type)
+        //             return false;
+
+        //         idx = idx0();
+        //         Value *ptr = emit_unbox(ctx, julia_type_to_llvm(ctx, (jl_value_t*)stt, nullptr)->getPointerTo(), strct, (jl_value_t*)jl_tparam0(aty));
+        //         bool isboxed = is_datatype_all_pointers(jl_tparam0(aty));
+        //         typed_store(ctx, ptr, idx, rhs, jl_cgval_t(), jft, ctx.tbaa().tbaa_data, nullptr, nullptr, isboxed,
+        //                 AtomicOrdering::NotAtomic,
+        //                 AtomicOrdering::NotAtomic,
+        //                 0, false, true, false, false, false, false, nullptr, "setfield_through_ptr");
+        //         return true;
+        //     }
+        // }
+
         // jl_datatype_t *uty = (jl_datatype_t*)jl_unwrap_unionall(obj.typ);
 
         jl_value_t *aty = obj.typ;

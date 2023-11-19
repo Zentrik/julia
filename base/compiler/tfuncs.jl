@@ -656,7 +656,7 @@ function pointer_eltype(@nospecialize(ptr))
 end
 
 @nospecs function setfield_through_ptr_tfunc(𝕃::AbstractLattice, a, v, i)
-    return a
+    return pointer_eltype(a)
 end
 @nospecs function pointerref_tfunc(𝕃::AbstractLattice, a, i, align)
     return pointer_eltype(a)
