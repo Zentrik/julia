@@ -1243,9 +1243,9 @@ static bool emit_setfield_through_ptr_unknownidx(jl_codectx_t &ctx,
     };
     const std::string fname = "setfield_through_ptr";
 
-    if (is_tupletype_homogeneous(jl_get_fieldtypes(stt))) {
+    bool all_pointers = is_datatype_all_pointers(stt);
+    if (is_tupletype_homogeneous(jl_get_fieldtypes(stt)) || all_pointers) {
         jl_value_t *jft = jl_svecref(stt->types, 0); // n.b. jl_get_fieldtypes assigned stt->types for here
-        // assert(jl_is_concrete_type(jft));
 
         if (jl_has_free_typevars(jft))
             return false;
@@ -1256,9 +1256,8 @@ static bool emit_setfield_through_ptr_unknownidx(jl_codectx_t &ctx,
             return false;
 
         idx = idx0();
-        bool isboxed = is_datatype_all_pointers(stt);;
         // Value *ptr = emit_unbox(ctx, julia_type_to_llvm(ctx, (jl_value_t*)stt, &isboxed)->getPointerTo(), strct, (jl_value_t*)stt);
-        typed_store(ctx, data_pointer(ctx, strct), idx, rhs, jl_cgval_t(), jft, strct.tbaa, nullptr, nullptr, isboxed,
+        typed_store(ctx, data_pointer(ctx, strct), idx, rhs, jl_cgval_t(), jft, strct.tbaa, nullptr, all_pointers ? strct.V : nullptr, all_pointers,
                 AtomicOrdering::NotAtomic,
                 AtomicOrdering::NotAtomic,
                 0, false, true, false, false, false, false, nullptr, "setfield_through_ptr");
@@ -1522,6 +1521,7 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         if (uty == jl_any_type) {
             // unsafe_store to Ptr{Any} is allowed to implicitly drop GC roots.
             thePtr = emit_unbox(ctx, ctx.types().T_size->getPointerTo(), ptrObj, aty);
+            // bool isboxed = true;
         }
         else if (val.ispointer()) {
             thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), ptrObj, aty);
@@ -1529,13 +1529,14 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         else {
             bool isboxed;
             Type *ptrty = julia_type_to_llvm(ctx, ety, &isboxed);
-            // assert(!isboxed);
+            // assert(!isboxed); // does this assert matter?
             if (!type_is_ghost(ptrty)) {
                 thePtr = emit_unbox(ctx, ptrty->getPointerTo(), ptrObj, aty);
             } else {
                 return emit_runtime_call(ctx, f, argv.data(), nargs);
             }
         }
+        // Value *thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), ptrObj, aty); // seemingly works, but might have address space issues?
 
         jl_cgval_t obj = mark_julia_slot(thePtr, (jl_value_t*)uty, NULL, ctx.tbaa().tbaa_data); // this argument is by-pointer
 

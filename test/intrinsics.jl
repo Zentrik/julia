@@ -379,12 +379,14 @@ begin
     @test _setfield(x, 2, -134) === TestStruct{Any}(1, -134)
     @test _setfield(x, :a, 4) === TestStruct{Any}(4, 2)
     @test _setfield(x, :b, -134) === TestStruct{Any}(1, -134)
+    @test !occursin("jl_setfield_through_ptr", sprint(code_llvm, _setfield, typeof((x, 1, 4))))
 
     y = TestStruct{Any}("1", "2")
     @test _setfield(y, 1, "4") === TestStruct{Any}("4", "2")
     @test _setfield(y, 2, "-134") === TestStruct{Any}("1", "-134")
     @test _setfield(y, :a, "4") === TestStruct{Any}("4", "2")
     @test _setfield(y, :b, "-134") === TestStruct{Any}("1", "-134")
+    @test !occursin("jl_setfield_through_ptr", sprint(code_llvm, _setfield, typeof((y, 1, "4"))))
 
     x = TestStruct{Int}(1, 2)
     @test _setfield(x, 1, 4) === TestStruct{Int}(4, 2)
@@ -415,7 +417,8 @@ import Base.==
 
 function _setfield_mutable(lhs::T, fld, val) where T
     copy = deepcopy(lhs)
-    ptr = Ptr{T}(Base.pointer_from_objref(copy))
+    ptr = Base.unsafe_convert(Ptr{T}, Ref(copy))
+    # ptr = Ptr{T}(Base.pointer_from_objref(copy))
     GC.@preserve copy Core.Intrinsics.setfield_through_ptr(ptr, fld, val)
     copy
 end
@@ -432,6 +435,7 @@ begin
     @test _setfield_mutable(y, 2, "-134") == MutableTestStruct{Any}("1", "-134")
     @test _setfield_mutable(y, :a, "4") == MutableTestStruct{Any}("4", "2")
     @test _setfield_mutable(y, :b, "-134") == MutableTestStruct{Any}("1", "-134")
+    @test !occursin("jl_setfield_through_ptr", sprint(code_llvm, _setfield_mutable, typeof((y, 1, "4"))))
 
     x = MutableTestStruct{Int}(1, 2)
     @test _setfield_mutable(x, 1, 4) == MutableTestStruct{Int}(4, 2)
@@ -449,4 +453,5 @@ begin
     @test _setfield_mutable(y, 2, "-134") == MutableTestStruct{String}("1", "-134")
     @test _setfield_mutable(y, :a, "4") == MutableTestStruct{String}("4", "2")
     @test _setfield_mutable(y, :b, "-134") == MutableTestStruct{String}("1", "-134")
+    @test !occursin("jl_setfield_through_ptr", sprint(code_llvm, _setfield_mutable, typeof((y, 1, "4"))))
 end
