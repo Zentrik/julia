@@ -375,6 +375,13 @@ begin
     @test (y->_setfield(y, 2, "-134"))(y) === ("1", "-134", "3")
 end
 
+begin
+    x = (Int64(1), Int16(2))
+    f(x) = _setfield(x, 2, Int16(12934))
+    @test f(x) === (Int64(1), Int16(12934))
+    @test !occursin("jl_setfield_through_ptr", sprint(code_llvm, f, typeof((x,))))
+end
+
 struct TestStruct{T}
     a::T
     b::T

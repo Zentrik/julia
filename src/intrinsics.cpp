@@ -1230,10 +1230,30 @@ static jl_cgval_t emit_ifelse(jl_codectx_t &ctx, jl_cgval_t c, jl_cgval_t x, jl_
     return mark_julia_type(ctx, ifelse_result, isboxed, jt);
 }
 
-static bool emit_setfield_through_ptr(jl_codectx_t &ctx,
+static bool emit_setfield_through_ptr_knownidx(jl_codectx_t &ctx,
         jl_cgval_t &strct, jl_cgval_t &rhs,
-        Value *idx, jl_datatype_t *stt, jl_value_t *inbounds,
-        enum jl_memory_order order)
+        ssize_t idx, jl_datatype_t *stt)
+{
+    const std::string fname = "setfield_through_ptr";
+
+    jl_value_t *ft = jl_field_type(stt, idx);
+    if (!jl_has_free_typevars(ft)) {
+        emit_typecheck(ctx, rhs, ft, fname);
+        rhs = update_julia_type(ctx, rhs, ft);
+        if (rhs.typ == jl_bottom_type)
+            return false;
+
+        emit_setfield(ctx, stt, strct, (size_t)idx, rhs, jl_cgval_t(), false,
+                AtomicOrdering::NotAtomic, AtomicOrdering::NotAtomic,
+                false, true, false, false, false, nullptr, fname);
+        return true;
+    }
+    return false;
+}
+
+static bool emit_setfield_through_ptr_unknown_idx(jl_codectx_t &ctx,
+        jl_cgval_t &strct, jl_cgval_t &rhs,
+        Value *idx, jl_datatype_t *stt, jl_value_t *inbounds)
 {
     size_t nfields = jl_datatype_nfields(stt);
     // bool maybe_null = (unsigned)stt->name->n_uninitialized != 0;
@@ -1551,23 +1571,27 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
 
         jl_cgval_t obj = mark_julia_slot(thePtr, (jl_value_t*)uty, NULL, ctx.tbaa().tbaa_data); // this argument is by-pointer
 
-        Value *idx = nullptr;
+        ssize_t idx = -1;
         if (fld.constant && jl_is_symbol(fld.constant)) {
-            idx = ConstantInt::get(ctx.types().T_size, 1+jl_field_index(uty, (jl_sym_t*)fld.constant, 1));
+            idx = jl_field_index(uty, (jl_sym_t*)fld.constant, 0);
         } else if (fld.typ == (jl_value_t*)jl_long_type) {
             if (fld.constant) {
                 ssize_t i = jl_unbox_long(fld.constant);
-                idx = ConstantInt::get(ctx.types().T_size, i);
+                if (i > 0 && i <= (ssize_t)jl_datatype_nfields(uty))
+                    idx = i - 1;
             } else {
-                idx = emit_unbox(ctx, ctx.types().T_size, fld, (jl_value_t*)jl_long_type);
+                Value *vidx = emit_unbox(ctx, ctx.types().T_size, fld, (jl_value_t*)jl_long_type);
+                if (emit_setfield_through_ptr_unknown_idx(ctx, obj, val, vidx, uty, jl_false))
+                    return ptrObj;
             }
         }
 
-        if (!idx)
+        if (idx == -1)
             return emit_runtime_call(ctx, f, argv.data(), nargs);
 
-        if (emit_setfield_through_ptr(ctx, obj, val, idx, uty, fld.constant ? jl_true : jl_false, jl_memory_order_unspecified))
+        if (emit_setfield_through_ptr_knownidx(ctx, obj, val, idx, uty))
             return ptrObj;
+
         return emit_runtime_call(ctx, f, argv.data(), nargs);
     }
 
