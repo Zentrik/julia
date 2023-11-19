@@ -373,6 +373,18 @@ begin
     @test _setfield(y, 2, "-134") === ("1", "-134", "3")
     @test (y->_setfield(y, 1, "4"))(y) === ("4", "2", "3")
     @test (y->_setfield(y, 2, "-134"))(y) === ("1", "-134", "3")
+
+    z = (Base.VecElement{Int}(1), Base.VecElement{Int}(2))
+    @test _setfield(z, 1, Base.VecElement{Int}(4)) === (Base.VecElement{Int}(4), Base.VecElement{Int}(2))
+    @test _setfield(z, 2, Base.VecElement{Int}(-134)) === (Base.VecElement{Int}(1), Base.VecElement{Int}(-134))
+    @test (z->_setfield(z, 1, Base.VecElement{Int}(4)))(z) === (Base.VecElement{Int}(4), Base.VecElement{Int}(2))
+    @test (z->_setfield(z, 2, Base.VecElement{Int}(-134)))(z) === (Base.VecElement{Int}(1), Base.VecElement{Int}(-134))
+
+    @test_throws TypeError _setfield(z, 2, Int16(234))
+    @test_throws TypeError _setfield(z, 1, "s")
+    @test_throws TypeError (z->_setfield(z, 1, Int16(234)))(z)
+    @test_throws TypeError (z->_setfield(z, 1, "s"))(z)
+    @test_throws BoundsError (z->_setfield(z, 0, Base.VecElement{Int}(5)))(z)
 end
 
 begin
