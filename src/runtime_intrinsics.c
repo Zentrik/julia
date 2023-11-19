@@ -1690,7 +1690,7 @@ JL_DLLEXPORT jl_value_t *jl_setfield_through_ptr(jl_value_t *p, jl_value_t *fld,
     // jl_datatype_t *st = (jl_datatype_t*)jl_typeof(*v);
     // set_nth_field(st, *v, idx0, rhs, 0);
 
-    JL_TYPECHK(pointerset, pointer, p);
+    JL_TYPECHK(setfield_through_ptr, pointer, p);
     // JL_TYPECHK(pointerset, long, i);
     jl_datatype_t *ety = (jl_datatype_t*)jl_tparam0(jl_typeof(p));
 
@@ -1714,7 +1714,7 @@ JL_DLLEXPORT jl_value_t *jl_setfield_through_ptr(jl_value_t *p, jl_value_t *fld,
     else {
         jl_value_t *ts[2] = {(jl_value_t*)jl_long_type, (jl_value_t*)jl_symbol_type};
         jl_value_t *t = jl_type_union(ts, 2);
-        jl_type_error("getfield", t, arg);
+        jl_type_error("setfield_through_ptr", t, arg);
     }
 
     jl_value_t *ft = jl_field_type_concrete(ety, idx);

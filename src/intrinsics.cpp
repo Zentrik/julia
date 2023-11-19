@@ -1232,18 +1232,18 @@ static jl_cgval_t emit_ifelse(jl_codectx_t &ctx, jl_cgval_t c, jl_cgval_t x, jl_
 
 static bool emit_setfield_through_ptr_knownidx(jl_codectx_t &ctx,
         jl_cgval_t &strct, jl_cgval_t &rhs,
-        ssize_t idx, jl_datatype_t *stt)
+        size_t idx0, jl_datatype_t *stt)
 {
     const std::string fname = "setfield_through_ptr";
 
-    jl_value_t *ft = jl_field_type(stt, idx);
+    jl_value_t *ft = jl_field_type(stt, idx0);
     if (!jl_has_free_typevars(ft)) {
         emit_typecheck(ctx, rhs, ft, fname);
         rhs = update_julia_type(ctx, rhs, ft);
         if (rhs.typ == jl_bottom_type)
             return false;
 
-        emit_setfield(ctx, stt, strct, (size_t)idx, rhs, jl_cgval_t(), false,
+        emit_setfield(ctx, stt, strct, idx0, rhs, jl_cgval_t(), false,
                 AtomicOrdering::NotAtomic, AtomicOrdering::NotAtomic,
                 false, true, false, false, false, nullptr, fname);
         return true;
@@ -1266,12 +1266,13 @@ static bool emit_setfield_through_ptr_unknown_idx(jl_codectx_t &ctx,
         (void)idx0();
         return true;
     }
+
     if (nfields == 1) {
         if (jl_has_free_typevars(jl_field_type(stt, 0))) {
             return false;
         }
         (void)idx0();
-        idx = ConstantInt::get(ctx.types().T_size, 1);
+        emit_setfield_through_ptr_knownidx(ctx, strct, rhs, 0, stt);
     }
 
     bool all_pointers = is_datatype_all_pointers(stt);
@@ -1583,6 +1584,11 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
                 Value *vidx = emit_unbox(ctx, ctx.types().T_size, fld, (jl_value_t*)jl_long_type);
                 if (emit_setfield_through_ptr_unknown_idx(ctx, obj, val, vidx, uty, jl_false))
                     return ptrObj;
+                else {
+                    vidx = ctx.builder.CreateSub(vidx, ConstantInt::get(ctx.types().T_size, 1));
+                    ctx.builder.CreateCall(prepare_call(jlsetnthfieldimmutable_func), {thePtr, vidx, boxed(ctx, val)});
+                    return ptrObj;
+                }
             }
         }
 
