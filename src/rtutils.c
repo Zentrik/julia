@@ -389,6 +389,13 @@ JL_DLLEXPORT void jl_set_nth_field(jl_value_t *v, size_t idx0, jl_value_t *rhs)
     set_nth_field(st, v, idx0, rhs, 0);
 }
 
+// // optimization of setfield which bypasses boxing of the idx (and checking field type validity)
+// JL_DLLEXPORT void jl_set_nth_field_through_ptr(jl_value_t * const*v, size_t idx0, jl_value_t *rhs)
+// {
+//     jl_datatype_t *st = (jl_datatype_t*)jl_typeof(*v);
+//     set_nth_field(st, *v, idx0, rhs, 0);
+// }
+
 // parsing --------------------------------------------------------------------
 
 static int substr_isspace(char *p, char *pend)
