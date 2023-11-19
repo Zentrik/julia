@@ -345,3 +345,108 @@ Base.show(io::IO, a::IntWrap) = print(io, "IntWrap(", a.x, ")")
         @test r2 isa IntWrap && r2.x === 103 === r[].x && r2 !== r[]
     end
 end)()
+
+# setfield_through_ptr tests
+function _setfield(in, fld, val)
+    x = Ref(in)
+    ptr = Base.unsafe_convert(Ptr{eltype(x)}, x)
+    GC.@preserve x Core.Intrinsics.setfield_through_ptr(ptr, fld, val)
+    x[]
+end
+
+begin
+    x = (1, 2)
+    @test _setfield(x, 1, 4) === (4, 2)
+    @test _setfield(x, 2, -134) === (1, -134)
+
+    @test_throws TypeError _setfield(x, 2, Int16(234))
+    @test_throws TypeError _setfield(x, 1, "s")
+    # @test_throws TypeError _setfield(x, 0, 5) # We don't boundscheck non constant indices
+
+    y = ("1", "2", "3")
+    @test _setfield(y, 1, "4") === ("4", "2", "3")
+    @test _setfield(y, 2, "-134") === ("1", "-134", "3")
+end
+
+struct TestStruct{T}
+    a::T
+    b::T
+end
+
+begin
+    x = TestStruct{Any}(1, 2)
+    @test _setfield(x, 1, 4) === TestStruct{Any}(4, 2)
+    @test _setfield(x, 2, -134) === TestStruct{Any}(1, -134)
+    @test _setfield(x, :a, 4) === TestStruct{Any}(4, 2)
+    @test _setfield(x, :b, -134) === TestStruct{Any}(1, -134)
+
+    y = TestStruct{Any}("1", "2")
+    @test _setfield(y, 1, "4") === TestStruct{Any}("4", "2")
+    @test _setfield(y, 2, "-134") === TestStruct{Any}("1", "-134")
+    @test _setfield(y, :a, "4") === TestStruct{Any}("4", "2")
+    @test _setfield(y, :b, "-134") === TestStruct{Any}("1", "-134")
+
+    x = TestStruct{Int}(1, 2)
+    @test _setfield(x, 1, 4) === TestStruct{Int}(4, 2)
+    @test _setfield(x, 2, -134) === TestStruct{Int}(1, -134)
+    @test _setfield(x, :a, 4) === TestStruct{Int}(4, 2)
+    @test _setfield(x, :b, -134) === TestStruct{Int}(1, -134)
+
+    @test_throws TypeError _setfield(x, 2, Int16(234))
+    @test_throws TypeError _setfield(x, 1, "s")
+    @test_throws TypeError _setfield(x, :b, Int16(234))
+    @test_throws TypeError _setfield(x, :a, "s")
+
+    y = TestStruct{String}("1", "2")
+    @test _setfield(y, 1, "4") === TestStruct{String}("4", "2")
+    @test _setfield(y, 2, "-134") === TestStruct{String}("1", "-134")
+    @test _setfield(y, :a, "4") === TestStruct{String}("4", "2")
+    @test _setfield(y, :b, "-134") === TestStruct{String}("1", "-134")
+end
+
+mutable struct MutableTestStruct{T}
+    a::T
+    b::T
+end
+
+import Base.==
+==(x::MutableTestStruct{T}, y::MutableTestStruct{T}) where T = (x.a === y.a) & (x.b === y.b)
+# Base.:==(x::MutableTestStruct{T}, y::MutableTestStruct{W}) where {T, W} = return false
+
+function _setfield_mutable(lhs::T, fld, val) where T
+    copy = deepcopy(lhs)
+    ptr = Ptr{T}(Base.pointer_from_objref(copy))
+    GC.@preserve copy Core.Intrinsics.setfield_through_ptr(ptr, fld, val)
+    copy
+end
+
+begin
+    x = MutableTestStruct{Any}(1, 2)
+    @test _setfield_mutable(x, 1, 4) == MutableTestStruct{Any}(4, 2)
+    @test _setfield_mutable(x, 2, -134) == MutableTestStruct{Any}(1, -134)
+    @test _setfield_mutable(x, :a, 4) == MutableTestStruct{Any}(4, 2)
+    @test _setfield_mutable(x, :b, -134) == MutableTestStruct{Any}(1, -134)
+
+    y = MutableTestStruct{Any}("1", "2")
+    @test _setfield_mutable(y, 1, "4") == MutableTestStruct{Any}("4", "2")
+    @test _setfield_mutable(y, 2, "-134") == MutableTestStruct{Any}("1", "-134")
+    @test _setfield_mutable(y, :a, "4") == MutableTestStruct{Any}("4", "2")
+    @test _setfield_mutable(y, :b, "-134") == MutableTestStruct{Any}("1", "-134")
+
+    x = MutableTestStruct{Int}(1, 2)
+    @test _setfield_mutable(x, 1, 4) == MutableTestStruct{Int}(4, 2)
+    @test _setfield_mutable(x, 2, -134) == MutableTestStruct{Int}(1, -134)
+    @test _setfield_mutable(x, :a, 4) == MutableTestStruct{Int}(4, 2)
+    @test _setfield_mutable(x, :b, -134) == MutableTestStruct{Int}(1, -134)
+
+    @test_throws TypeError _setfield_mutable(x, 2, Int16(234))
+    @test_throws TypeError _setfield_mutable(x, 1, "s")
+    @test_throws TypeError _setfield_mutable(x, :b, Int16(234))
+    @test_throws TypeError _setfield_mutable(x, :a, "s")
+
+    y = MutableTestStruct{String}("1", "2")
+    @test _setfield_mutable(y, 1, "4") == MutableTestStruct{String}("4", "2")
+    @test _setfield_mutable(y, 2, "-134") == MutableTestStruct{String}("1", "-134")
+    @test _setfield_mutable(y, :a, "4") == MutableTestStruct{String}("4", "2")
+    @test _setfield_mutable(y, :b, "-134") == MutableTestStruct{String}("1", "-134")
+end
