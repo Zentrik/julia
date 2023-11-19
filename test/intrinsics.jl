@@ -358,14 +358,21 @@ begin
     x = (1, 2)
     @test _setfield(x, 1, 4) === (4, 2)
     @test _setfield(x, 2, -134) === (1, -134)
+    @test (x->_setfield(x, 1, 4))(x) === (4, 2)
+    @test (x->_setfield(x, 2, -134))(x) === (1, -134)
 
     @test_throws TypeError _setfield(x, 2, Int16(234))
     @test_throws TypeError _setfield(x, 1, "s")
+    @test_throws TypeError (x->_setfield(x, 1, Int16(234)))(x)
+    @test_throws TypeError (x->_setfield(x, 1, "s"))(x)
     # @test_throws TypeError _setfield(x, 0, 5) # We don't boundscheck non constant indices
+    @test_throws BoundsError (x->_setfield(x, 0, 5))(x)
 
     y = ("1", "2", "3")
     @test _setfield(y, 1, "4") === ("4", "2", "3")
     @test _setfield(y, 2, "-134") === ("1", "-134", "3")
+    @test (y->_setfield(y, 1, "4"))(y) === ("4", "2", "3")
+    @test (y->_setfield(y, 2, "-134"))(y) === ("1", "-134", "3")
 end
 
 struct TestStruct{T}
