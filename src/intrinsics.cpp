@@ -1585,9 +1585,9 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
                 if (emit_setfield_through_ptr_unknown_idx(ctx, obj, val, vidx, uty, jl_false))
                     return ptrObj;
                 else {
-                    vidx = ctx.builder.CreateSub(vidx, ConstantInt::get(ctx.types().T_size, 1));
-                    ctx.builder.CreateCall(prepare_call(jlsetnthfieldimmutable_func), {thePtr, vidx, boxed(ctx, val)});
-                    return ptrObj;
+                    // vidx = ctx.builder.CreateSub(vidx, ConstantInt::get(ctx.types().T_size, 1));
+                    // ctx.builder.CreateCall(prepare_call(jlsetnthfieldimmutable_func), {thePtr, vidx, boxed(ctx, val)});
+                    // return ptrObj;
                 }
             }
         }
