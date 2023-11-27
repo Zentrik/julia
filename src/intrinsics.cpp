@@ -1296,131 +1296,6 @@ static bool emit_setfield_through_ptr_unknown_idx(jl_codectx_t &ctx,
         return true;
     }
     return false;
-
-    // if (nfields == 0) {
-    //     (void)idx0();
-    //     *ret = jl_cgval_t();
-    //     return true;
-    // }
-    // if (nfields == 1) {
-    //     if (jl_has_free_typevars(jl_field_type(stt, 0))) {
-    //         return false;
-    //     }
-    //     (void)idx0();
-    //     *ret = emit_getfield_knownidx(ctx, strct, 0, stt, order);
-    //     return true;
-    // }
-    // assert(!jl_is_vecelement_type((jl_value_t*)stt));
-
-    // if (!strct.ispointer()) { // unboxed
-    //     assert(jl_is_concrete_immutable((jl_value_t*)stt));
-    //     bool isboxed = is_datatype_all_pointers(stt);
-    //     jl_svec_t *types = stt->types;
-    //     bool issame = is_tupletype_homogeneous(types);
-    //     if (issame) {
-    //         jl_value_t *jft = jl_svecref(types, 0);
-    //         if (strct.isghost) {
-    //             (void)idx0();
-    //             *ret = ghostValue(ctx, jft);
-    //             return true;
-    //         }
-    //         if (isa<VectorType>(strct.V->getType())) {
-    //             assert(stt->layout->npointers == 0); // we could, but don't emit this
-    //             idx = idx0();
-    //             if (sizeof(void*) != sizeof(int))
-    //                 idx = ctx.builder.CreateTrunc(idx, getInt32Ty(ctx.builder.getContext())); // llvm3.3 requires this, harmless elsewhere
-    //             ctx.builder.CreateInsertElement(strct.V, rhs, idx);
-    //             return true;
-    //         }
-    //         else if (isa<ArrayType>(strct.V->getType())) {
-    //             // Value *indices[2] = {ConstantInt::get(ctx.types().T_size, 0), idx0()};
-
-    //             // // Value *thePtr = emit_unbox(ctx, julia_type_to_llvm(ctx, stt, nullptr)->getPointerTo(), strct, stt);
-    //             // Value *thePtr = data_pointer(ctx, strct);
-    //             // Value *fldptr = ctx.builder.CreateInBoundsGEP(julia_type_to_llvm(ctx, stt, nullptr), thePtr, ArrayRef<Value *>{ConstantInt::get(ctx.types().T_size, 0), idx0()}); // can only do this for llvm vectors/arrays not structs
-
-    //             // typed_store(ctx, fldptr, nullptr, rhs, jl_cgval_t(), stt, ctx.tbaa().tbaa_data, nullptr, nullptr, isboxed,
-    //             //     AtomicOrdering::NotAtomic,
-    //             //     AtomicOrdering::NotAtomic,
-    //             //     0, false, true, false, false, false, false, nullptr, "setfield_through_ptr");
-    //             return true;
-    //         }
-    //         else {
-    //             llvm_unreachable("homogeneous struct should have had a homogeneous type");
-    //         }
-    //     }
-    // }
-
-    // bool maybeatomic = stt->name->atomicfields != NULL;
-    // if (strct.ispointer() && !maybeatomic) { // boxed or stack
-    //     if (order != jl_memory_order_notatomic && order != jl_memory_order_unspecified) {
-    //         emit_atomic_error(ctx, "setfield_through_ptr: non-atomic field cannot be accessed atomically");
-    //         *ret = jl_cgval_t(); // unreachable
-    //         return true;
-    //     }
-    //     if (is_datatype_all_pointers(stt)) {
-    //         size_t minimum_field_size = std::numeric_limits<size_t>::max();
-    //         size_t minimum_align = JL_HEAP_ALIGNMENT;
-    //         for (size_t i = 0; i < nfields; ++i) {
-    //             jl_value_t *ft = jl_field_type(stt, i);
-    //             minimum_field_size = std::min(minimum_field_size,
-    //                 dereferenceable_size(ft));
-    //             if (minimum_field_size == 0) {
-    //                 minimum_align = 1;
-    //                 break;
-    //             }
-    //             minimum_align = std::min(minimum_align,
-    //                 (size_t)julia_alignment(ft));
-    //         }
-    //         Value *fldptr = ctx.builder.CreateInBoundsGEP(
-    //                 ctx.types().T_prjlvalue,
-    //                 emit_bitcast(ctx, data_pointer(ctx, strct), ctx.types().T_pprjlvalue),
-    //                 idx0());
-    //         setName(ctx.emission_context, fldptr, "getfield_ptr");
-    //         LoadInst *fld = ctx.builder.CreateAlignedLoad(ctx.types().T_prjlvalue, fldptr, Align(sizeof(void*)));
-    //         setName(ctx.emission_context, fld, "getfield");
-    //         fld->setOrdering(AtomicOrdering::Unordered);
-    //         jl_aliasinfo_t ai = jl_aliasinfo_t::fromTBAA(ctx, strct.tbaa);
-    //         ai.decorateInst(fld);
-    //         maybe_mark_load_dereferenceable(fld, maybe_null, minimum_field_size, minimum_align);
-    //         if (maybe_null)
-    //             null_pointer_check(ctx, fld);
-    //         *ret = mark_julia_type(ctx, fld, true, jl_any_type);
-    //         return true;
-    //     }
-    //     else if (is_tupletype_homogeneous(jl_get_fieldtypes(stt))) {
-    //         // typed_store
-    //         // return true;
-
-    //         assert(nfields > 0); // nf == 0 trapped by all_pointers case
-    //         jl_value_t *jft = jl_svecref(stt->types, 0); // n.b. jl_get_fieldtypes assigned stt->types for here
-    //         assert(jl_is_concrete_type(jft));
-    //         idx = idx0();
-    //         Value *ptr = data_pointer(ctx, strct);
-    //         if (!stt->name->mutabl && !(maybe_null && (jft == (jl_value_t*)jl_bool_type ||
-    //                                              ((jl_datatype_t*)jft)->layout->npointers))) {
-    //             // just compute the pointer and let user load it when necessary
-    //             Type *fty = julia_type_to_llvm(ctx, jft);
-    //             Value *addr = ctx.builder.CreateInBoundsGEP(fty, emit_bitcast(ctx, ptr, PointerType::get(fty, 0)), idx);
-    //             *ret = mark_julia_slot(addr, jft, NULL, strct.tbaa);
-    //             return true;
-    //         }
-    //         typed_store(ctx, fldptr, idx, rhs, jl_cgval_t(), stt, ctx.tbaa().tbaa_data, nullptr, nullptr, isboxed,
-    //                 AtomicOrdering::NotAtomic,
-    //                 AtomicOrdering::NotAtomic,
-    //                 0, false, true, false, false, false, false, nullptr, "setfield_through_ptr");
-    //         *ret = typed_store(ctx, ptr, idx, rhs, jft, strct.tbaa, nullptr, false, AtomicOrdering::NotAtomic, maybe_null);
-    //         return true;
-    //     }
-    //     else if (strct.isboxed) {
-    //         // idx = ctx.builder.CreateSub(idx, ConstantInt::get(ctx.types().T_size, 1));
-    //         // Value *fld = ctx.builder.CreateCall(prepare_call(jlgetnthfieldchecked_func), { boxed(ctx, strct), idx });
-    //         // *ret = mark_julia_type(ctx, fld, true, jl_any_type);
-    //         // return true;
-    //         return false;
-    //     }
-    // }
-    // return false;
 }
 
 static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **args, size_t nargs)
@@ -1553,7 +1428,6 @@ static jl_cgval_t emit_intrinsic(jl_codectx_t &ctx, intrinsic f, jl_value_t **ar
         if (uty == jl_any_type) {
             // unsafe_store to Ptr{Any} is allowed to implicitly drop GC roots.
             thePtr = emit_unbox(ctx, ctx.types().T_size->getPointerTo(), ptrObj, aty);
-            // bool isboxed = true;
         }
         else if (val.ispointer()) {
             thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), ptrObj, aty);
