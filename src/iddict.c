@@ -8,7 +8,7 @@
 #define keyhash(k) jl_object_id_(jl_typetagof(k), k)
 #define h2index(hv, sz) (size_t)(((hv) & ((sz)-1)) * 2)
 
-static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, jl_value_t *val);
+static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, jl_value_t *val, int rehash);
 
 JL_DLLEXPORT jl_genericmemory_t *jl_idtable_rehash(jl_genericmemory_t *a, size_t newsz)
 {
@@ -21,7 +21,7 @@ JL_DLLEXPORT jl_genericmemory_t *jl_idtable_rehash(jl_genericmemory_t *a, size_t
     JL_GC_PUSH2(&newa, &a);
     for (i = 0; i < sz; i += 2) {
         if (ol[i + 1] != NULL) {
-            jl_table_assign_bp(&newa, ol[i], ol[i + 1]);
+            jl_table_assign_bp(&newa, ol[i], ol[i + 1], 1);
             // it is however necessary here because allocation
             // can (and will) occur in a recursive call inside table_lookup_bp
         }
@@ -30,7 +30,7 @@ JL_DLLEXPORT jl_genericmemory_t *jl_idtable_rehash(jl_genericmemory_t *a, size_t
     return newa;
 }
 
-static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, jl_value_t *val)
+static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, jl_value_t *val, int rehash)
 {
     // pa points to a **un**rooted address
     uint_t hv;
@@ -60,7 +60,7 @@ static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, j
                     empty_slot = index;
                 break;
             }
-            if (jl_egal(key, k2)) {
+            if (!rehash && jl_egal(key, k2)) {
                 if (jl_atomic_load_relaxed(&tab[index + 1]) != NULL) {
                     jl_atomic_store_release(&tab[index + 1], val);
                     jl_gc_wb(a, val);
@@ -144,7 +144,7 @@ inline _Atomic(jl_value_t*) *jl_table_peek_bp(jl_genericmemory_t *a, jl_value_t 
 JL_DLLEXPORT
 jl_genericmemory_t *jl_eqtable_put(jl_genericmemory_t *h, jl_value_t *key, jl_value_t *val, int *p_inserted)
 {
-    int inserted = jl_table_assign_bp(&h, key, val);
+    int inserted = jl_table_assign_bp(&h, key, val, 0);
     if (p_inserted)
         *p_inserted = inserted;
     return h;
