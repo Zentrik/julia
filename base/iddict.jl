@@ -26,8 +26,7 @@ IdDict{Any, String} with 3 entries:
 mutable struct IdDict{K,V} <: AbstractDict{K,V}
     ht::Memory{Any}
     count::Int
-    ndel::Int
-    IdDict{K,V}() where {K, V} = new{K,V}(Memory{Any}(undef, 32), 0, 0)
+    IdDict{K,V}() where {K, V} = new{K,V}(Memory{Any}(undef, 32), 0)
 
     function IdDict{K,V}(itr) where {K, V}
         d = IdDict{K,V}()
@@ -42,7 +41,7 @@ mutable struct IdDict{K,V} <: AbstractDict{K,V}
         d
     end
 
-    IdDict{K,V}(d::IdDict{K,V}) where {K, V} = new{K,V}(copy(d.ht), d.count, d.ndel)
+    IdDict{K,V}(d::IdDict{K,V}) where {K, V} = new{K,V}(copy(d.ht), d.count)
 end
 
 IdDict() = IdDict{Any,Any}()
@@ -88,10 +87,6 @@ function setindex!(d::IdDict{K,V}, @nospecialize(val), @nospecialize(key)) where
     if !(val isa V) # avoid a dynamic call
         val = convert(V, val)::V
     end
-    if d.ndel >= ((3*length(d.ht))>>2)
-        rehash!(d, max((length(d.ht)%UInt)>>1, 32))
-        d.ndel = 0
-    end
     inserted = RefValue{Cint}(0)
     d.ht = ccall(:jl_eqtable_put, Memory{Any}, (Any, Any, Any, Ptr{Cint}), d.ht, key, val, inserted)
     d.count += inserted[]
@@ -116,7 +111,6 @@ function pop!(d::IdDict{K,V}, @nospecialize(key), @nospecialize(default)) where 
         return default
     else
         d.count -= 1
-        d.ndel += 1
         return val::V
     end
 end
@@ -138,7 +132,6 @@ function empty!(d::IdDict)
     t = @_gc_preserve_begin ht
     memset(unsafe_convert(Ptr{Cvoid}, ht), 0, sizeof(ht))
     @_gc_preserve_end t
-    d.ndel = 0
     d.count = 0
     return d
 end
