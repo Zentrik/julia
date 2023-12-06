@@ -45,6 +45,9 @@ static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, j
     size_t maxprobe = max_probe(sz);
     _Atomic(jl_value_t*) *tab = (_Atomic(jl_value_t*)*) a->ptr;
 
+    hv = keyhash(key);
+    int firstwrite = 1;
+
     // if (!rehash && count > h->length / 7) {
     //     /* table load factor > 70% */
     //     /* quadruple size, rehash, retry the insert */
@@ -67,7 +70,6 @@ static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, j
 
     while (1) {
         iter = 0;
-        hv = keyhash(key);
         index = h2index(hv, sz);
         size_t two_sz = sz*2;
         orig = index;
@@ -82,46 +84,47 @@ static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, j
                     empty_slot = index;
                 break;
             }
-            if (rehash == 0 && jl_egal(key, k2)) {
-                if (jl_atomic_load_relaxed(&tab[index + 1]) != NULL) {
-                    jl_atomic_store_release(&tab[index + 1], val);
+            if (!rehash && jl_egal(key, k2)) {
+                assert(jl_atomic_load_relaxed(&tab[index + 1]) != NULL);
+                jl_atomic_store_release(&tab[index + 1], val);
+                if (firstwrite)
                     jl_gc_wb(a, val);
-                    return 0;
-                }
-                assert(0);
+                return 0;
             }
-            size_t desired_index = h2index(keyhash(k2), sz);
+            uint hv2 = keyhash(k2);
+            size_t desired_index = h2index(hv2, sz);
             size_t current_distance = (index + two_sz - desired_index) & (two_sz - 1);
 
             if (probe_current > desired_index) {
                 jl_value_t *val2 = jl_atomic_load_relaxed(&tab[index + 1]);
                 jl_atomic_store_release(&tab[index], key);
-                jl_gc_wb(a, key);
+                if (firstwrite)
+                    jl_gc_wb(a, key);
                 jl_atomic_store_release(&tab[index + 1], val);
-                jl_gc_wb(a, val);
+                if (firstwrite)
+                    jl_gc_wb(a, val);
+                firstwrite = 0;
                 val = val2;
                 key = k2;
                 probe_current = current_distance;
-                // hv = keyhash(k2);
+                hv = hv2;
             }
 
-            if (empty_slot == -1 && jl_atomic_load_relaxed(&tab[index + 1]) == NULL) {
+            if (empty_slot == -1 && jl_atomic_load_relaxed(&tab[index + 1]) == NULL)
                 assert(0);
-                assert(jl_atomic_load_relaxed(&tab[index]) == jl_nothing);
-                empty_slot = index;
-            }
 
             index = (index + 2) & (two_sz - 1);
-            // assert(index != orig);
             iter++;
             probe_current += 2;
         } while (iter <= maxprobe && index != orig);
 
         if (empty_slot != -1) {
             jl_atomic_store_release(&tab[empty_slot], key);
-            jl_gc_wb(a, key);
+            if (firstwrite)
+                jl_gc_wb(a, key);
             jl_atomic_store_release(&tab[empty_slot + 1], val);
-            jl_gc_wb(a, val);
+            if (firstwrite)
+                jl_gc_wb(a, val);
             return 1;
         }
 
@@ -171,12 +174,8 @@ static inline size_t jl_table_peek_valueindex(jl_genericmemory_t *a, jl_value_t 
         //     return 0;
 
         if (jl_egal(key, k2)) {
-            if (jl_atomic_load_relaxed(&tab[index + 1]) != NULL)
-                return index + 1;
-            assert(0);
-            // `nothing` is our sentinel value for deletion, so need to keep searching if it's also our search key
-            if (key != jl_nothing)
-                return 0; // concurrent insertion hasn't completed yet
+            assert(jl_atomic_load_relaxed(&tab[index + 1]) != NULL);
+            return index + 1;
         }
 
         index = (index + 2) & (two_sz - 1);
@@ -237,8 +236,6 @@ jl_value_t *jl_eqtable_pop(jl_genericmemory_t *h, jl_value_t *key, jl_value_t *d
     size_t sz = hash_size(h);
     size_t two_sz = sz*2;
     while (1) {
-        jl_atomic_store_relaxed(&tab[keyidx], NULL); // clear the key
-        jl_atomic_store_relaxed(&tab[keyidx+1], NULL); // and the value
         size_t next_keyidx = (keyidx + 2) & (two_sz - 1);
         jl_value_t *k2 = jl_atomic_load_relaxed(&tab[next_keyidx]);
         if (k2 == NULL) break; // empty key
@@ -249,6 +246,8 @@ jl_value_t *jl_eqtable_pop(jl_genericmemory_t *h, jl_value_t *key, jl_value_t *d
         jl_atomic_store_relaxed(&tab[keyidx+1], jl_atomic_load_relaxed(&tab[next_keyidx+1]));
         keyidx = next_keyidx;
     }
+    jl_atomic_store_relaxed(&tab[keyidx], NULL); // clear the key
+    jl_atomic_store_relaxed(&tab[keyidx+1], NULL); // and the value
     return val;
 }
 
