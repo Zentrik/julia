@@ -27,7 +27,11 @@ julia> hash(10, a) # only use the output of another hash function as the second 
 
 See also: [`objectid`](@ref), [`Dict`](@ref), [`Set`](@ref).
 """
+if UInt === UInt64
+    hash(x::Any) = finalize_ahash(hash(x, UInt64(0x243f_6a88_85a3_08d3)))
+else
 hash(x::Any) = hash(x, zero(UInt))
+end
 hash(w::WeakRef, h::UInt) = hash(w.value, h)
 
 # Types can't be deleted, so marking as total allows the compiler to look up the hash
@@ -83,10 +87,20 @@ else
     hash_uint(x::UInt)     = hash_32_32(x)
 end
 
+update_ahash(x::UInt64, h::UInt64) = folded_multiply(x ⊻ h, UInt64(6364136223846793005))
+finalize_ahash(h::UInt64) = bitrotate(folded_multiply(h, 0x1319_8a2e_0370_7344), h & 63)
+
+# "x86_64", "aarch64", "mips64", "powerpc64", "riscv64gc", "s390x"
+# https://github.com/tkaitchuck/aHash/issues/106
+function folded_multiply(s::UInt64, by::UInt64)
+    result = UInt128(s) * UInt128(by)
+    UInt64(result & 0xffff_ffff_ffff_ffff) ⊻ UInt64(result >> 64)
+end
+
 ## efficient value-based hashing of integers ##
 
-hash(x::Int64,  h::UInt) = hash_uint64(bitcast(UInt64, x)) - 3h
-hash(x::UInt64, h::UInt) = hash_uint64(x) - 3h
+hash(x::Int64,  h::UInt) = hash(bitcast(UInt64, x), h)
+hash(x::UInt64, h::UInt) = update_ahash(x, h)
 hash(x::Union{Bool,Int8,UInt8,Int16,UInt16,Int32,UInt32}, h::UInt) = hash(Int64(x), h)
 
 function hash_integer(n::Integer, h::UInt)
