@@ -27,11 +27,13 @@ julia> hash(10, a) # only use the output of another hash function as the second 
 
 See also: [`objectid`](@ref), [`Dict`](@ref), [`Set`](@ref).
 """
+hash
 if UInt === UInt64
     hash(x::Any) = finalize_ahash(hash(x, 0x243f_6a88_85a3_08d3))
 else
     hash(x::Any) = hash(x, zero(UInt))
 end
+
 hash(w::WeakRef, h::UInt) = hash(w.value, h)
 
 # Types can't be deleted, so marking as total allows the compiler to look up the hash
