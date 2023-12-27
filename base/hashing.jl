@@ -28,34 +28,22 @@ julia> hash(10, a) # only use the output of another hash function as the second 
 See also: [`objectid`](@ref), [`Dict`](@ref), [`Set`](@ref).
 """
 if UInt === UInt64
-    hash(x::Any) = finalize_ahash(hash(x, UInt64(0x243f_6a88_85a3_08d3)))
+    hash(x::Any) = finalize_ahash(hash(x, 0x243f_6a88_85a3_08d3))
 else
-hash(x::Any) = hash(x, zero(UInt))
+    hash(x::Any) = hash(x, zero(UInt))
 end
 hash(w::WeakRef, h::UInt) = hash(w.value, h)
 
 # Types can't be deleted, so marking as total allows the compiler to look up the hash
-hash(T::Type, h::UInt) = hash_uint(3h - @assume_effects :total ccall(:jl_type_hash, UInt, (Any,), T))
+hash(T::Type, h::UInt) = hash(@assume_effects :total ccall(:jl_type_hash, UInt, (Any,), T), h)
 
 ## hashing general objects ##
 
-hash(@nospecialize(x), h::UInt) = hash_uint(3h - objectid(x))
+hash(@nospecialize(x), h::UInt) = hash(objectid(x), h)
 
 hash(x::Symbol) = objectid(x)
 
 ## core data hashing functions ##
-
-function hash_64_64(n::UInt64)
-    a::UInt64 = n
-    a = ~a + a << 21
-    a =  a ⊻ a >> 24
-    a =  a + a << 3 + a << 8
-    a =  a ⊻ a >> 14
-    a =  a + a << 2 + a << 4
-    a =  a ⊻ a >> 28
-    a =  a + a << 31
-    return a
-end
 
 function hash_64_32(n::UInt64)
     a::UInt64 = n
@@ -66,25 +54,6 @@ function hash_64_32(n::UInt64)
     a =  a + a << 6
     a =  a ⊻ a >> 22
     return a % UInt32
-end
-
-function hash_32_32(n::UInt32)
-    a::UInt32 = n
-    a = a + 0x7ed55d16 + a << 12
-    a = a ⊻ 0xc761c23c ⊻ a >> 19
-    a = a + 0x165667b1 + a << 5
-    a = a + 0xd3a2646c ⊻ a << 9
-    a = a + 0xfd7046c5 + a << 3
-    a = a ⊻ 0xb55a4f09 ⊻ a >> 16
-    return a
-end
-
-if UInt === UInt64
-    hash_uint64(x::UInt64) = hash_64_64(x)
-    hash_uint(x::UInt)     = hash_64_64(x)
-else
-    hash_uint64(x::UInt64) = hash_64_32(x)
-    hash_uint(x::UInt)     = hash_32_32(x)
 end
 
 update_ahash(x::UInt64, h::UInt64) = folded_multiply(x ⊻ h, UInt64(6364136223846793005))
@@ -99,16 +68,18 @@ end
 
 ## efficient value-based hashing of integers ##
 
-hash(x::Int64,  h::UInt) = hash(bitcast(UInt64, x), h)
-hash(x::UInt64, h::UInt) = update_ahash(x, h)
+hash(x::Int64,  h::UInt32) = hash_64_32(bitcast(UInt64, x)) - 3h
+hash(x::UInt64, h::UInt32) = hash_64_32(x) - 3h
+hash(x::Int64,  h::UInt64) = hash(bitcast(UInt64, x), h)
+hash(x::UInt64, h::UInt64) = update_ahash(x, h)
 hash(x::Union{Bool,Int8,UInt8,Int16,UInt16,Int32,UInt32}, h::UInt) = hash(Int64(x), h)
 
 function hash_integer(n::Integer, h::UInt)
-    h ⊻= hash_uint((n % UInt) ⊻ h)
+    h = hash(UInt(n % UInt), h)
     n = abs(n)
     n >>>= sizeof(UInt) << 3
     while n != 0
-        h ⊻= hash_uint((n % UInt) ⊻ h)
+        h = hash(UInt(n % UInt), h)
         n >>>= sizeof(UInt) << 3
     end
     return h
