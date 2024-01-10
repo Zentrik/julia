@@ -37,11 +37,11 @@ end
 hash(w::WeakRef, h::UInt) = hash(w.value, h)
 
 # Types can't be deleted, so marking as total allows the compiler to look up the hash
-hash(T::Type, h::UInt) = hash(@assume_effects :total ccall(:jl_type_hash, UInt, (Any,), T), h)
+hash(T::Type, h::UInt) = -hash(@assume_effects :total ccall(:jl_type_hash, UInt, (Any,), T), h)
 
 ## hashing general objects ##
 
-hash(@nospecialize(x), h::UInt) = hash(objectid(x), h)
+hash(@nospecialize(x), h::UInt) = -hash(objectid(x), h)
 
 hash(x::Symbol) = objectid(x)
 
@@ -58,6 +58,17 @@ function hash_64_32(n::UInt64)
     return a % UInt32
 end
 
+function hash_32_32(n::UInt32)
+    a::UInt32 = n
+    a = a + 0x7ed55d16 + a << 12
+    a = a ⊻ 0xc761c23c ⊻ a >> 19
+    a = a + 0x165667b1 + a << 5
+    a = a + 0xd3a2646c ⊻ a << 9
+    a = a + 0xfd7046c5 + a << 3
+    a = a ⊻ 0xb55a4f09 ⊻ a >> 16
+    return a
+end
+
 update_ahash(x::UInt64, h::UInt64) = folded_multiply(x ⊻ h, UInt64(6364136223846793005))
 finalize_ahash(h::UInt64) = bitrotate(folded_multiply(h, 0x1319_8a2e_0370_7344), h & 63)
 
@@ -70,6 +81,7 @@ end
 
 ## efficient value-based hashing of integers ##
 
+hash(x::UInt32, h::UInt32) = hash_32_32(x) - 3h
 hash(x::Int64,  h::UInt32) = hash_64_32(bitcast(UInt64, x)) - 3h
 hash(x::UInt64, h::UInt32) = hash_64_32(x) - 3h
 hash(x::Int64,  h::UInt64) = hash(bitcast(UInt64, x), h)
