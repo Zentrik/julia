@@ -13,7 +13,7 @@ static inline int jl_table_assign_bp(jl_genericmemory_t **pa, jl_value_t *key, j
 JL_DLLEXPORT jl_genericmemory_t *jl_idtable_rehash(jl_genericmemory_t *a, size_t newsz)
 {
     JL_PROBE_IDDICT_REHASH();
-    JL_ITMING(IDDICT_REHASH);
+    JL_TIMING(IDDICT_REHASH, IDDICT_REHASH);
     size_t sz = a->length;
     size_t i;
     jl_value_t **ol = (jl_value_t **) a->ptr;

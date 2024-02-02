@@ -93,7 +93,7 @@ WITH_DTRACE := 0
 WITH_ITTAPI := 0
 
 # Enable Tracy support
-WITH_TRACY := 0
+WITH_TRACY := 1
 WITH_TRACY_CALLSTACKS := 0
 
 # Enable Timing Counts support
@@ -361,7 +361,7 @@ USE_RV := 0
 
 # Use `ccache` for speeding up recompilation of the C/C++ part of Julia.
 # Requires the `ccache` executable to be in the `PATH` environment variable.
-USECCACHE := 0
+USECCACHE := 1
 
 # Cross-compile
 #XC_HOST := i686-w64-mingw32
