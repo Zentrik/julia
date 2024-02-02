@@ -14,6 +14,7 @@
 #include "julia_internal.h"
 #include "builtin_proto.h"
 #include "julia_assert.h"
+#include "hashing.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -1629,7 +1630,7 @@ static unsigned typekey_hash(jl_typename_t *tn, jl_value_t **key, size_t n, int 
             if (vm->N && jl_is_long(vm->N))
                 repeats = jl_unbox_long(vm->N);
             else
-                hash = bitmix(0x064eeaab, hash); // 0x064eeaab is just a randomly chosen constant
+                hash = inthash(hash); // TODO: 32 bit
             p = vm->T ? vm->T : (jl_value_t*)jl_any_type;
         }
         unsigned hashp = type_hash(p, &failed);
@@ -1639,6 +1640,7 @@ static unsigned typekey_hash(jl_typename_t *tn, jl_value_t **key, size_t n, int 
             hash = bitmix(hashp, hash);
     }
     hash = bitmix(~tn->hash, hash);
+    hash = finalize_ahash(hash); // TODO: 32 bit
     return hash ? hash : 1;
 }
 
@@ -1660,6 +1662,7 @@ static unsigned typekeyvalue_hash(jl_typename_t *tn, jl_value_t *key1, jl_value_
         hash = bitmix(hj, hash);
     }
     hash = bitmix(~tn->hash, hash);
+    hash = finalize_ahash(hash); // TODO: 32 bit
     return hash ? hash : 1;
 }
 

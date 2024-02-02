@@ -1773,6 +1773,7 @@ JL_DLLIMPORT uint64_t jl_getUnwindInfo(uint64_t dwBase);
 #define JL_PROBE_RT_SLEEP_CHECK_TASKQ_WAKE(ptls) do ; while (0)
 #define JL_PROBE_RT_SLEEP_CHECK_TASK_WAKE(ptls) do ; while (0)
 #define JL_PROBE_RT_SLEEP_CHECK_UV_WAKE(ptls) do ; while (0)
+#define JL_PROBE_IDDICT_REHASH() do ; while (0)
 
 #define JL_PROBE_GC_BEGIN_ENABLED() (0)
 #define JL_PROBE_GC_STOP_THE_WORLD_ENABLED() (0)

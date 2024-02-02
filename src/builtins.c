@@ -25,6 +25,7 @@
 #include "builtin_proto.h"
 #include "intrinsics.h"
 #include "julia_assert.h"
+#include "hashing.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -313,7 +314,7 @@ static uintptr_t bits_hash(const void *b, size_t sz) JL_NOTSAFEPOINT
 
 static uintptr_t NOINLINE hash_svec(jl_svec_t *v) JL_NOTSAFEPOINT
 {
-    uintptr_t h = 0;
+    uintptr_t h = 0x243f6a8885a308d3; // TODO: 32 bit
     size_t i, l = jl_svec_len(v);
     for (i = 0; i < l; i++) {
         jl_value_t *x = jl_svecref(v, i);
@@ -478,7 +479,7 @@ JL_DLLEXPORT inline uintptr_t jl_object_id_(uintptr_t tv, jl_value_t *v) JL_NOTS
     else if (tv == (uintptr_t)jl_typename_type) {
         return ((jl_typename_t*)v)->hash;
     }
-    return jl_object_id__cold(tv, v);
+    return finalize_ahash(jl_object_id__cold(tv, v)); // TODO: 32 bit
 }
 
 

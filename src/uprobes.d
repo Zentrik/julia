@@ -25,6 +25,8 @@ provider julia {
     probe rt__sleep__check__taskq__wake(jl_ptls_t ptls);
     probe rt__sleep__check__task__wake(jl_ptls_t ptls);
     probe rt__sleep__check__uv__wake(jl_ptls_t ptls);
+
+    probe iddict__rehash();
 };
 
 #pragma D attributes Evolving/Evolving/Common provider julia provider
