@@ -13,10 +13,10 @@ extern "C" {
 
 uint_t nextipow2(uint_t i) JL_NOTSAFEPOINT;
 uint32_t int32hash(uint32_t a) JL_NOTSAFEPOINT;
-uint64_t int64hash(uint64_t key) JL_NOTSAFEPOINT;
+STATIC_INLINE uint64_t int64hash(uint64_t key) JL_NOTSAFEPOINT;
 uint32_t int64to32hash(uint64_t key) JL_NOTSAFEPOINT;
-uint64_t update_ahash(uint64_t x, uint64_t h) JL_NOTSAFEPOINT;
-uint64_t finalize_ahash(uint64_t h) JL_NOTSAFEPOINT;
+STATIC_INLINE uint64_t update_ahash(uint64_t x, uint64_t h) JL_NOTSAFEPOINT;
+STATIC_INLINE uint64_t finalize_ahash(uint64_t h) JL_NOTSAFEPOINT;
 #ifdef _P64
 #define inthash int64hash
 #else
@@ -26,6 +26,23 @@ JL_DLLEXPORT uint64_t memhash(const char *buf, size_t n) JL_NOTSAFEPOINT;
 JL_DLLEXPORT uint64_t memhash_seed(const char *buf, size_t n, uint32_t seed) JL_NOTSAFEPOINT;
 JL_DLLEXPORT uint32_t memhash32(const char *buf, size_t n) JL_NOTSAFEPOINT;
 JL_DLLEXPORT uint32_t memhash32_seed(const char *buf, size_t n, uint32_t seed) JL_NOTSAFEPOINT;
+
+// AHash
+STATIC_INLINE uint64_t folded_multiply(uint64_t s, uint64_t by) {
+    __uint128_t result = (__uint128_t)s * (__uint128_t)by;
+    return (uint64_t)(result & 0xffffffffffffffff) ^ (uint64_t)(result >> 64);
+}
+STATIC_INLINE uint64_t update_ahash(uint64_t a, uint64_t b) {
+    return folded_multiply(a ^ b, 6364136223846793005);
+}
+STATIC_INLINE uint64_t finalize_ahash(uint64_t h) {
+    h = folded_multiply(h, 0x13198a2e03707344);
+    return (h << (h & 63)) | (h >> (8*sizeof(h) - (h & 63))); // rotate (hash & 63) bits to the left
+}
+STATIC_INLINE uint64_t int64hash(uint64_t key)
+{
+    return finalize_ahash(update_ahash(key, 0x243f6a8885a308d3));
+}
 
 #ifdef _P64
 STATIC_INLINE uint64_t bitmix(uint64_t a, uint64_t b) JL_NOTSAFEPOINT

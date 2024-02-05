@@ -87,13 +87,13 @@ WITH_GC_VERIFY := 0
 WITH_GC_DEBUG_ENV := 0
 
 # Enable DTrace support
-WITH_DTRACE := 0
+WITH_DTRACE := 1
 
 # Enable ITTAPI integration
 WITH_ITTAPI := 0
 
 # Enable Tracy support
-WITH_TRACY := 1
+WITH_TRACY := 0
 WITH_TRACY_CALLSTACKS := 0
 
 # Enable Timing Counts support
