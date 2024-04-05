@@ -54,4 +54,4 @@ if [ ! -d "$BUILD" ]; then
 fi
 
 cd "$BUILD"  # so that we can pass `-C src` to `make`
-make "$@"
+TSAN_OPTIONS="suppressions=$HERE/tsan_supressed_warnings" make "$@"

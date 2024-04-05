@@ -1,0 +1,4 @@
+# ThreadSanitizer suppressions file
+
+# Issue 46178
+deadlock:jl_codegen_params_t::jl_codegen_params_t

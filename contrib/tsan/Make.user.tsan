@@ -11,3 +11,6 @@ USE_BINARYBUILDER_LLVM=1
 
 override SANITIZE=1
 override SANITIZE_THREAD=1
+
+# Prevent tsan erroring during precompilation
+JULIA_PRECOMPILE=0
