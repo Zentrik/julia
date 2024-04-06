@@ -54,4 +54,5 @@ if [ ! -d "$BUILD" ]; then
 fi
 
 cd "$BUILD"  # so that we can pass `-C src` to `make`
-TSAN_OPTIONS="suppressions=$HERE/tsan_supressed_warnings" make "$@"
+export TSAN_OPTIONS="suppressions=$HERE/tsan_supressed_warnings external_symbolizer_path=$TOOLCHAIN/usr/tools/llvm-symbolizer"
+make "$@"

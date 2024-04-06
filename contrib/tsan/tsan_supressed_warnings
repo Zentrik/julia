@@ -2,3 +2,7 @@
 
 # Issue 46178
 deadlock:jl_codegen_params_t::jl_codegen_params_t
+
+race_top:gc_debug
+
+signal:jl_critical_error
