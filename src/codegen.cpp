@@ -145,19 +145,19 @@ auto getInt8PtrTy(LLVMContext &ctxt) {
     return PointerType::getUnqual(ctxt);
 }
 auto getInt16PtrTy(LLVMContext &ctxt) {
-    return Type::getInt16PtrTy(ctxt);
+    return PointerType::getUnqual(ctxt);
 }
 auto getInt32PtrTy(LLVMContext &ctxt) {
-    return Type::getInt32PtrTy(ctxt);
+    return PointerType::getUnqual(ctxt);
 }
 auto getInt64PtrTy(LLVMContext &ctxt) {
-    return Type::getInt64PtrTy(ctxt);
+    return PointerType::getUnqual(ctxt);
 }
 auto getFloatPtrTy(LLVMContext &ctxt) {
-    return Type::getFloatPtrTy(ctxt);
+    return PointerType::getUnqual(ctxt);
 }
 auto getDoublePtrTy(LLVMContext &ctxt) {
-    return Type::getDoublePtrTy(ctxt);
+    return PointerType::getUnqual(ctxt);
 }
 
 typedef Instruction TerminatorInst;
