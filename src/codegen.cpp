@@ -142,7 +142,7 @@ auto getCharTy(LLVMContext &ctxt) {
     return getInt32Ty(ctxt);
 }
 auto getInt8PtrTy(LLVMContext &ctxt) {
-    return Type::getInt8PtrTy(ctxt);
+    return PointerType::getUnqual(ctxt);
 }
 auto getInt16PtrTy(LLVMContext &ctxt) {
     return Type::getInt16PtrTy(ctxt);

@@ -291,7 +291,7 @@ static inline llvm::Value *emit_gc_state_set(llvm::IRBuilder<> &builder, llvm::T
 {
     using namespace llvm;
     Type *T_int8 = state->getType();
-    llvm::Value *ptls_i8 = emit_bitcast_with_builder(builder, ptls, builder.getInt8PtrTy());
+    llvm::Value *ptls_i8 = emit_bitcast_with_builder(builder, ptls, builder.getPtrTy());
     Constant *offset = ConstantInt::getSigned(builder.getInt32Ty(), offsetof(jl_tls_states_t, gc_state));
     Value *gc_state = builder.CreateInBoundsGEP(T_int8, ptls_i8, ArrayRef<Value*>(offset), "gc_state");
     if (old_state == nullptr) {

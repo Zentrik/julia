@@ -649,7 +649,7 @@ void Optimizer::moveToStack(CallInst *orig_inst, size_t sz, bool has_ref, AllocF
         auto asize = ConstantInt::get(Type::getInt64Ty(prolog_builder.getContext()), sz / DL.getTypeAllocSize(pass.T_prjlvalue));
         buff = prolog_builder.CreateAlloca(pass.T_prjlvalue, asize);
         buff->setAlignment(Align(align));
-        ptr = cast<Instruction>(prolog_builder.CreateBitCast(buff, Type::getInt8PtrTy(prolog_builder.getContext())));
+        ptr = cast<Instruction>(prolog_builder.CreateBitCast(buff, PointerType::getUnqual(prolog_builder.getContext())));
     }
     else {
         Type *buffty;
@@ -659,7 +659,7 @@ void Optimizer::moveToStack(CallInst *orig_inst, size_t sz, bool has_ref, AllocF
             buffty = ArrayType::get(Type::getInt8Ty(pass.getLLVMContext()), sz);
         buff = prolog_builder.CreateAlloca(buffty);
         buff->setAlignment(Align(align));
-        ptr = cast<Instruction>(prolog_builder.CreateBitCast(buff, Type::getInt8PtrTy(prolog_builder.getContext(), buff->getType()->getPointerAddressSpace())));
+        ptr = cast<Instruction>(prolog_builder.CreateBitCast(buff, PointerType::get(prolog_builder.getContext(), buff->getType()->getPointerAddressSpace())));
     }
     insertLifetime(ptr, ConstantInt::get(Type::getInt64Ty(prolog_builder.getContext()), sz), orig_inst);
     if (sz != 0 && !has_ref) { // TODO: fix has_ref case too
@@ -960,7 +960,7 @@ void Optimizer::splitOnStack(CallInst *orig_inst)
         }
         slot.slot = prolog_builder.CreateAlloca(allocty);
         IRBuilder<> builder(orig_inst);
-        insertLifetime(prolog_builder.CreateBitCast(slot.slot, Type::getInt8PtrTy(prolog_builder.getContext())),
+        insertLifetime(prolog_builder.CreateBitCast(slot.slot, PointerType::getUnqual(prolog_builder.getContext())),
                        ConstantInt::get(Type::getInt64Ty(prolog_builder.getContext()), field.size), orig_inst);
         initializeAlloca(builder, slot.slot, use_info.allockind);
         slots.push_back(std::move(slot));
@@ -1020,7 +1020,7 @@ void Optimizer::splitOnStack(CallInst *orig_inst)
             }
         }
         else {
-            addr = builder.CreateBitCast(slot.slot, Type::getInt8PtrTy(builder.getContext()));
+            addr = builder.CreateBitCast(slot.slot, PointerType::getUnqual(builder.getContext()));
             addr = builder.CreateConstInBoundsGEP1_32(Type::getInt8Ty(builder.getContext()), addr, offset);
             addr = builder.CreateBitCast(addr, elty->getPointerTo());
         }
@@ -1144,7 +1144,7 @@ void Optimizer::splitOnStack(CallInst *orig_inst)
                                 store->setOrdering(AtomicOrdering::NotAtomic);
                                 continue;
                             }
-                            auto ptr8 = builder.CreateBitCast(slot.slot, Type::getInt8PtrTy(builder.getContext()));
+                            auto ptr8 = builder.CreateBitCast(slot.slot, PointerType::getUnqual(builder.getContext()));
                             if (offset > slot.offset)
                                 ptr8 = builder.CreateConstInBoundsGEP1_32(Type::getInt8Ty(builder.getContext()), ptr8,
                                                                           offset - slot.offset);
@@ -1268,8 +1268,8 @@ bool AllocOpt::doInitialization(Module &M)
 
     DL = &M.getDataLayout();
 
-    lifetime_start = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_start, { Type::getInt8PtrTy(M.getContext(), DL->getAllocaAddrSpace()) });
-    lifetime_end = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_end, { Type::getInt8PtrTy(M.getContext(), DL->getAllocaAddrSpace()) });
+    lifetime_start = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_start, { PointerType::get(M.getContext(), DL->getAllocaAddrSpace()) });
+    lifetime_end = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_end, { PointerType::get(M.getContext(), DL->getAllocaAddrSpace()) });
 
     return true;
 }

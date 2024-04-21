@@ -510,7 +510,7 @@ static std::pair<Value*,int> FindBaseValue(const State &S, Value *V, bool UseCac
                     // This could really be anything, but it's not loaded
                     // from a tracked pointer, so it doesn't matter what
                     // it is--just pick something simple.
-                    CurrentV = ConstantPointerNull::get(Type::getInt8PtrTy(V->getContext()));
+                    CurrentV = ConstantPointerNull::get(PointerType::getUnqual(V->getContext()));
                 }
                 continue;
             }
@@ -545,12 +545,12 @@ static std::pair<Value*,int> FindBaseValue(const State &S, Value *V, bool UseCac
                         if (II->getIntrinsicID() == Intrinsic::masked_load) {
                             fld_idx = -1;
                             if (!isSpecialPtr(CurrentV->getType())) {
-                                CurrentV = ConstantPointerNull::get(Type::getInt8PtrTy(V->getContext()));
+                                CurrentV = ConstantPointerNull::get(PointerType::getUnqual(V->getContext()));
                             }
                         } else {
                             if (auto VTy2 = dyn_cast<VectorType>(CurrentV->getType())) {
                                 if (!isSpecialPtr(VTy2->getElementType())) {
-                                    CurrentV = ConstantPointerNull::get(Type::getInt8PtrTy(V->getContext()));
+                                    CurrentV = ConstantPointerNull::get(PointerType::getUnqual(V->getContext()));
                                     fld_idx = -1;
                                 }
                             }
@@ -2439,7 +2439,7 @@ bool LateLowerGCFrame::CleanupIR(Function &F, State *S, bool *CFGModified) {
                 // gc_alloc_obj, and will redundantly set the tag.)
                 auto allocBytesIntrinsic = getOrDeclare(jl_intrinsics::GCAllocBytes);
                 auto ptlsLoad = get_current_ptls_from_task(builder, T_size, CI->getArgOperand(0), tbaa_gcframe);
-                auto ptls = builder.CreateBitCast(ptlsLoad, Type::getInt8PtrTy(builder.getContext()));
+                auto ptls = builder.CreateBitCast(ptlsLoad, PointerType::getUnqual(builder.getContext()));
                 auto newI = builder.CreateCall(
                     allocBytesIntrinsic,
                     {

@@ -116,7 +116,7 @@ static bool lowerExcHandlers(Function &F) {
     Function *jlenter_func = M.getFunction(XSTR(jl_enter_handler));
     Function *setjmp_func = M.getFunction(jl_setjmp_name);
 
-    auto T_pint8 = Type::getInt8PtrTy(M.getContext(), 0);
+    auto T_pint8 = PointerType::get(M.getContext(), 0);
     Function *lifetime_start = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_start, { T_pint8 });
     Function *lifetime_end = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_end, { T_pint8 });
 
@@ -179,7 +179,7 @@ static bool lowerExcHandlers(Function &F) {
         auto *buff = new AllocaInst(Type::getInt8Ty(F.getContext()), allocaAddressSpace,
                 handler_sz, Align(16), "", firstInst);
         if (allocaAddressSpace) {
-            AddrSpaceCastInst *buff_casted = new AddrSpaceCastInst(buff, Type::getInt8PtrTy(F.getContext(), AddressSpace::Generic));
+            AddrSpaceCastInst *buff_casted = new AddrSpaceCastInst(buff, PointerType::get(F.getContext(), AddressSpace::Generic));
             buff_casted->insertAfter(buff);
             buffs.push_back(buff_casted);
         } else {
