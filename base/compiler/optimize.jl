@@ -1408,7 +1408,7 @@ function statement_or_branch_cost(@nospecialize(stmt), line::Int, src::Union{Cod
     return thiscost
 end
 
-@inline function process_block!(max_inlining_cost_to_block, ir::IRCode, params::OptimizationParams, block_idx, block_start_instruction, block_end_instruction, has_cycle, total_cost, number_of_costly_instructions)
+@inline function process_block!(max_inlining_cost_to_block, ir::IRCode, params::OptimizationParams, block_idx, block_start_instruction, block_end_instruction, has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block)
     dst(tgt) = first(ir.cfg.blocks[tgt].stmts)
 
     block_cost = 0
@@ -1440,9 +1440,10 @@ end
             max_cost = max(max_cost, plus_saturate(max_inlining_cost_to_block[predecessor_block_idx], block_cost))
         end
         max_inlining_cost_to_block[block_idx] = max_cost
+        max_inlining_cost_any_block = max(max_inlining_cost_any_block, max_cost)
     end
 
-    return has_cycle, total_cost, number_of_costly_instructions
+    return has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block
 end
 
 # Given an acyclic CFG there are paths that program flow can take through basic blocks. The cost of inlining a function for a specific path is the sum of the cost of inlining each instruction along that path, representing the run time cost of that path, and a cost for the instructions not in the path, this accounts for compile time and icache costs of the function being inlined.
@@ -1453,6 +1454,7 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
     total_cost = 0
 
     max_inlining_cost_to_block = Memory{Int}(undef, length(ir.cfg.blocks))
+    max_inlining_cost_any_block = 0
 
     # This models compile time and icache cost for blocks that are not in the maximal path below
     number_of_costly_instructions = 0
@@ -1460,18 +1462,18 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
     # Bail out early if MAX_INLINE_COST is reached, all blocks should be reachable due to construct_ssa!?
     block_start_instruction = 1
     for (block_idx, index) in enumerate(ir.cfg.index)
-        has_cycle, total_cost, number_of_costly_instructions = process_block!(max_inlining_cost_to_block, ir, params, block_idx, block_start_instruction, index - 1, has_cycle, total_cost, number_of_costly_instructions)
-        if (!has_cycle && number_of_costly_instructions + max_inlining_cost_to_block[block_idx] > cost_threshold) || (has_cycle && total_cost > cost_threshold)
+        has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block = process_block!(max_inlining_cost_to_block, ir, params, block_idx, block_start_instruction, index - 1, has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block)
+        if (!has_cycle && plus_saturate(max_inlining_cost_any_block, number_of_costly_instructions) > cost_threshold) || (has_cycle && total_cost > cost_threshold)
             return MAX_INLINE_COST
         end
         block_start_instruction = index
     end
-    has_cycle, total_cost, number_of_costly_instructions = process_block!(max_inlining_cost_to_block, ir, params, length(ir.cfg.blocks), block_start_instruction, length(ir.stmts), has_cycle, total_cost, number_of_costly_instructions)
+    has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block = process_block!(max_inlining_cost_to_block, ir, params, length(ir.cfg.blocks), block_start_instruction, length(ir.stmts), has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block)
 
     if has_cycle
         return inline_cost_clamp(total_cost)
     else
-        return inline_cost_clamp(plus_saturate(max_inlining_cost_to_block[end], number_of_costly_instructions))
+        return inline_cost_clamp(plus_saturate(max_inlining_cost_any_block, number_of_costly_instructions))
     end
 end
 
