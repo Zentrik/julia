@@ -1423,9 +1423,9 @@ end
                 block_cost = plus_saturate(block_cost, thiscost)
             end
 
-            if stmt isa GotoNode && dst(stmt.label) < j
+            if stmt isa GotoNode && dst(stmt.label) <= j
                 has_cycle = true
-            elseif stmt isa GotoIfNot && dst(stmt.dest) < j
+            elseif stmt isa GotoIfNot && dst(stmt.dest) <= j
                 has_cycle = true
             end
         end
@@ -1436,6 +1436,10 @@ end
         for predecessor_block_idx in ir.cfg.blocks[block_idx].preds
             if predecessor_block_idx == 0
                 continue
+            end
+            if predecessor_block_idx >= block_idx
+                has_cycle = true
+                break
             end
             max_cost = max(max_cost, plus_saturate(max_inlining_cost_to_block[predecessor_block_idx], block_cost))
         end
@@ -1463,6 +1467,7 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
     block_start_instruction = 1
     for (block_idx, index) in enumerate(ir.cfg.index)
         has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block = process_block!(max_inlining_cost_to_block, ir, params, block_idx, block_start_instruction, index - 1, has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block)
+
         if (!has_cycle && plus_saturate(max_inlining_cost_any_block, number_of_costly_instructions) > cost_threshold) || (has_cycle && total_cost > cost_threshold)
             return MAX_INLINE_COST
         end
