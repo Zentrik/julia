@@ -1409,10 +1409,12 @@ function statement_or_branch_cost(@nospecialize(stmt), line::Int, src::Union{Cod
 end
 
 # Given an acyclic CFG there are paths that program flow can take through basic blocks. The cost of inlining a function for a specific path is the sum of the cost of inlining each instruction along that path, representing the run time cost of that path, and a cost for the instructions not in the path, this accounts for compile time and icache costs of the function being inlined.
-# TODO: For a cyclic CFG, ...
 # The inlining cost for a function is the maximal cost over all paths.
+# For a cyclic CFG, inlining cost is sum of costs for each instruction. We could instead split the graph into SCCs, and then apply the method for acyclic graphs. I suspect it would be slow and not change much.
 function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int)
-    # TODO: Think about what happens with a cycle
+    dst(tgt) = isa(ir, IRCode) ? first(ir.cfg.blocks[tgt].stmts) : tgt
+
+    has_cycle = false
 
     # Compute the cost of inlining each block
     block_inlining_costs = Memory{Int}(undef, length(ir.cfg.blocks))
@@ -1433,6 +1435,12 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
                 number_of_costly_instructions += 1
                 thiscost -= 1
                 block_cost = plus_saturate(block_cost, thiscost)
+            end
+
+            if stmt isa GotoNode && dst(stmt.label) < j
+                has_cycle = true
+            elseif stmt isa GotoIfNot && dst(stmt.dest) < j
+                has_cycle = true
             end
         end
         if number_of_costly_instructions + block_cost > cost_threshold
@@ -1458,9 +1466,17 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
 
     block_inlining_costs[end] = block_cost
 
-    # Find path with largest inlining cost starting from entry to exit block ignoring cycles
+    if has_cycle
+        cost = number_of_costly_instructions
+        for block_cost in block_inlining_costs
+            cost = plus_saturate(cost, block_cost)
+        end
+        return inline_cost_clamp(cost)
+    end
+
+    # Find path with largest inlining cost starting from entry to exit block
     # Bail out early if MAX_INLINE_COST is reached
-    # IR is in reverse post order, so is topologically sorted assuming no cycles.
+    # IR is in reverse post order, so is topologically sorted.
 
     max_inlining_cost_to_block = Memory{Int}(undef, length(ir.cfg.blocks))
     for i in eachindex(max_inlining_cost_to_block)
@@ -1475,7 +1491,7 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
         max_inlining_cost_to_block[successor_block_idx] = max(cost, max_inlining_cost_to_block[successor_block_idx])
     end
 
-    return number_of_costly_instructions + inline_cost_clamp(max_inlining_cost_to_block[end])
+    return inline_cost_clamp(plus_saturate(max_inlining_cost_to_block[end], number_of_costly_instructions))
 end
 
 function statement_costs!(cost::Vector{Int}, body::Vector{Any}, src::Union{CodeInfo, IRCode}, sptypes::Vector{VarState}, params::OptimizationParams)
