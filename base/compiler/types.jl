@@ -320,7 +320,7 @@ end
 function OptimizationParams(
     params::OptimizationParams = OptimizationParams(
         #=inlining::Bool=# inlining_enabled(),
-        #=inline_cost_threshold::Int=# 75,
+        #=inline_cost_threshold::Int=# 60,
         #=inline_nonleaf_penalty::Int=# 1000,
         #=inline_tupleret_bonus::Int=# 250,
         #=inline_error_path_cost::Int=# 20,
