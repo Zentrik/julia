@@ -1409,21 +1409,13 @@ function statement_or_branch_cost(@nospecialize(stmt), line::Int, src::Union{Cod
 end
 
 function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int)
-    # if cycle
-    #     bodycost = 0
-    #     for i = 1:length(ir.stmts)
-    #         stmt = ir[SSAValue(i)][:stmt]
-    #         thiscost = statement_or_branch_cost(stmt, i, ir, ir.sptypes, params)
-    #         bodycost = plus_saturate(bodycost, thiscost)
-    #         if bodycost > cost_threshold
-    #             return MAX_INLINE_COST
-    #         end
-    #     end
-    #     return inline_cost_clamp(bodycost)
-    # end
+    # TODO: Think about what happens with a cycle
 
     # Compute the cost of inlining each block
     block_inlining_costs = Memory{Int}(undef, length(ir.cfg.blocks))
+
+    # This models compile time and icache cost for blocks that are not in the maximal path below
+    number_of_costly_instructions = 0
 
     # Bail out early if MAX_INLINE_COST is reached, all blocks should be reachable due to construct_ssa!?
     block_start_instruction = 1
@@ -1434,9 +1426,13 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
         for j in block_start_instruction:block_end_instruction
             stmt = ir[SSAValue(j)][:stmt]
             thiscost = statement_or_branch_cost(stmt, j, ir, ir.sptypes, params)
-            block_cost = plus_saturate(block_cost, thiscost)
+            if thiscost > 0
+                number_of_costly_instructions += 1
+                thiscost -= 1
+                block_cost = plus_saturate(block_cost, thiscost)
+            end
         end
-        if block_cost > cost_threshold
+        if number_of_costly_instructions + block_cost > cost_threshold
             return MAX_INLINE_COST
         end
 
@@ -1447,17 +1443,21 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
     for j in block_start_instruction:length(ir.stmts)
         stmt = ir[SSAValue(j)][:stmt]
         thiscost = statement_or_branch_cost(stmt, j, ir, ir.sptypes, params)
-        block_cost = plus_saturate(block_cost, thiscost)
+        if thiscost > 0
+            number_of_costly_instructions += 1
+            thiscost -= 1
+            block_cost = plus_saturate(block_cost, thiscost)
+        end
     end
-    if block_cost > cost_threshold
+    if number_of_costly_instructions + block_cost > cost_threshold
         return MAX_INLINE_COST
     end
 
     block_inlining_costs[end] = block_cost
 
-    # Find path with largest inlining cost starting from entry to exit block
+    # Find path with largest inlining cost starting from entry to exit block ignoring cycles
     # Bail out early if MAX_INLINE_COST is reached
-    # IR is in reverse post order, so is topologically sorted.
+    # IR is in reverse post order, so is topologically sorted assuming no cycles.
 
     max_inlining_cost_to_block = Memory{Int}(undef, length(ir.cfg.blocks))
     for i in eachindex(max_inlining_cost_to_block)
@@ -1466,13 +1466,13 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
 
     for (block_idx, block) in enumerate(ir.cfg.blocks), successor_block_idx in block.succs
         cost = plus_saturate(max_inlining_cost_to_block[block_idx], block_inlining_costs[successor_block_idx])
-        if cost > cost_threshold
+        if number_of_costly_instructions + cost > cost_threshold
             return MAX_INLINE_COST
         end
         max_inlining_cost_to_block[successor_block_idx] = max(cost, max_inlining_cost_to_block[successor_block_idx])
     end
 
-    return inline_cost_clamp(max_inlining_cost_to_block[end])
+    return number_of_costly_instructions + inline_cost_clamp(max_inlining_cost_to_block[end])
 end
 
 function statement_costs!(cost::Vector{Int}, body::Vector{Any}, src::Union{CodeInfo, IRCode}, sptypes::Vector{VarState}, params::OptimizationParams)
