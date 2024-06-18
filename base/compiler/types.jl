@@ -248,7 +248,7 @@ Parameters that control optimizer operation.
 - `opt_params.inlining::Bool = inlining_enabled()`\\
   Controls whether or not inlining is enabled.
 ---
-- `opt_params.inline_cost_threshold::Int = 100`\\
+- `opt_params.inline_cost_threshold::Int = 75`\\
   Specifies the number of CPU cycles beyond which it's not worth inlining.
 ---
 - `opt_params.inline_nonleaf_penalty::Int = 1000`\\
@@ -320,7 +320,7 @@ end
 function OptimizationParams(
     params::OptimizationParams = OptimizationParams(
         #=inlining::Bool=# inlining_enabled(),
-        #=inline_cost_threshold::Int=# 100,
+        #=inline_cost_threshold::Int=# 75,
         #=inline_nonleaf_penalty::Int=# 1000,
         #=inline_tupleret_bonus::Int=# 250,
         #=inline_error_path_cost::Int=# 20,
