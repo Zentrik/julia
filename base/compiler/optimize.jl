@@ -1408,6 +1408,9 @@ function statement_or_branch_cost(@nospecialize(stmt), line::Int, src::Union{Cod
     return thiscost
 end
 
+# Given an acyclic CFG there are paths that program flow can take through basic blocks. The cost of inlining a function for a specific path is the sum of the cost of inlining each instruction along that path, representing the run time cost of that path, and a cost for the instructions not in the path, this accounts for compile time and icache costs of the function being inlined.
+# TODO: For a cyclic CFG, ...
+# The inlining cost for a function is the maximal cost over all paths.
 function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int)
     # TODO: Think about what happens with a cycle
 
