@@ -1422,12 +1422,6 @@ end
                 thiscost -= 1
                 block_cost = plus_saturate(block_cost, thiscost)
             end
-
-            if stmt isa GotoNode && dst(stmt.label) <= j
-                has_cycle = true
-            elseif stmt isa GotoIfNot && dst(stmt.dest) <= j
-                has_cycle = true
-            end
         end
     end
 
@@ -1454,6 +1448,7 @@ end
 # The inlining cost for a function is the maximal cost over all paths.
 # For a cyclic CFG, inlining cost is sum of costs for each instruction. We could instead split the graph into SCCs, and then apply the method for acyclic graphs. I suspect it would be slow and not change much.
 function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int)
+    cost(has_cycle, total_cost, max_inlining_cost_any_block, number_of_costly_instructions) = has_cycle ? total_cost : (plus_saturate(max_inlining_cost_any_block, number_of_costly_instructions) * 100) ÷ 80
     has_cycle = false
     total_cost = 0
 
@@ -1468,17 +1463,18 @@ function inline_cost(ir::IRCode, params::OptimizationParams, cost_threshold::Int
     for (block_idx, index) in enumerate(ir.cfg.index)
         has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block = process_block!(max_inlining_cost_to_block, ir, params, block_idx, block_start_instruction, index - 1, has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block)
 
-        if (!has_cycle && plus_saturate(max_inlining_cost_any_block, number_of_costly_instructions) > cost_threshold) || (has_cycle && total_cost > cost_threshold)
+        if cost(has_cycle, total_cost, max_inlining_cost_any_block, number_of_costly_instructions) > cost_threshold
             return MAX_INLINE_COST
         end
         block_start_instruction = index
     end
     has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block = process_block!(max_inlining_cost_to_block, ir, params, length(ir.cfg.blocks), block_start_instruction, length(ir.stmts), has_cycle, total_cost, number_of_costly_instructions, max_inlining_cost_any_block)
 
-    if has_cycle
-        return inline_cost_clamp(total_cost)
+    c = cost(has_cycle, total_cost, max_inlining_cost_any_block, number_of_costly_instructions)
+    if c > cost_threshold
+        return MAX_INLINE_COST
     else
-        return inline_cost_clamp(plus_saturate(max_inlining_cost_any_block, number_of_costly_instructions))
+        return inline_cost_clamp(c)
     end
 end
 
