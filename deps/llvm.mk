@@ -4,8 +4,8 @@ include $(SRCDIR)/llvm-ver.make
 include $(SRCDIR)/llvm-options.mk
 
 ifneq ($(USE_BINARYBUILDER_LLVM), 1)
-LLVM_GIT_URL:=https://github.com/JuliaLang/llvm-project.git
-LLVM_TAR_URL=https://api.github.com/repos/JuliaLang/llvm-project/tarball/$1
+LLVM_GIT_URL:=https://github.com/llvm/llvm-project
+LLVM_TAR_URL=https://api.github.com/repos/llvm/llvm-project/tarball/$1
 $(eval $(call git-external,llvm,LLVM,CMakeLists.txt,,$(SRCCACHE)))
 
 LLVM_BUILDDIR := $(BUILDDIR)/$(LLVM_SRC_DIR)
@@ -233,7 +233,12 @@ $$(LLVM_BUILDDIR_withtype)/build-compiled: $$(SRCCACHE)/$$(LLVM_SRC_DIR)/$1.patc
 LLVM_PATCH_PREV := $$(SRCCACHE)/$$(LLVM_SRC_DIR)/$1.patch-applied
 endef
 
+ifeq ($(shell test $(LLVM_VER_MAJ) -ge 19 && echo true),true)
+$(eval $(call LLVM_PATCH,llvm-19-ittapi-cmake))
+else
 $(eval $(call LLVM_PATCH,llvm-ittapi-cmake))
+endif
+
 
 ifeq ($(USE_SYSTEM_ZLIB), 0)
 $(LLVM_BUILDDIR_withtype)/build-configured: | $(build_prefix)/manifest/zlib
