@@ -915,6 +915,24 @@ static const auto jldeclareconst_func = new JuliaFunction<>{
             {T_pjlvalue, T_pjlvalue, T_pjlvalue}, false); },
     nullptr,
 };
+static const auto jldeclareconstval_func = new JuliaFunction<>{
+    XSTR(jl_declare_constant_val),
+    [](LLVMContext &C) {
+        auto T_pjlvalue = JuliaType::get_pjlvalue_ty(C);
+        auto T_prjlvalue = JuliaType::get_prjlvalue_ty(C);
+        return FunctionType::get(getVoidTy(C),
+            {T_pjlvalue, T_pjlvalue, T_pjlvalue, T_prjlvalue}, false); },
+    nullptr,
+};
+static const auto jldeclareglobal_func = new JuliaFunction<>{
+    XSTR(jl_declare_global),
+    [](LLVMContext &C) {
+        auto T_pjlvalue = JuliaType::get_pjlvalue_ty(C);
+        auto T_prjlvalue = JuliaType::get_prjlvalue_ty(C);
+        return FunctionType::get(getVoidTy(C),
+            {T_pjlvalue, T_pjlvalue, T_prjlvalue}, false); },
+    nullptr,
+};
 static const auto jlgetbindingorerror_func = new JuliaFunction<>{
     XSTR(jl_get_binding_or_error),
     [](LLVMContext &C) {
@@ -6422,7 +6440,7 @@ static jl_cgval_t emit_expr(jl_codectx_t &ctx, jl_value_t *expr, ssize_t ssaidx_
         return meth;
     }
     else if (head == jl_const_sym) {
-        assert(nargs == 1);
+        assert(nargs <= 2);
         jl_sym_t *sym = (jl_sym_t*)args[0];
         jl_module_t *mod = ctx.module;
         if (jl_is_globalref(sym)) {
@@ -6432,10 +6450,29 @@ static jl_cgval_t emit_expr(jl_codectx_t &ctx, jl_value_t *expr, ssize_t ssaidx_
         if (jl_is_symbol(sym)) {
             jl_binding_t *bnd = NULL;
             Value *bp = global_binding_pointer(ctx, mod, sym, &bnd, true, true);
-            if (bp)
-                ctx.builder.CreateCall(prepare_call(jldeclareconst_func),
-                        { bp, literal_pointer_val(ctx, (jl_value_t*)mod), literal_pointer_val(ctx, (jl_value_t*)sym) });
+            if (bp) {
+                if (nargs == 2) {
+                    jl_cgval_t rhs = emit_expr(ctx, args[1]);
+                    ctx.builder.CreateCall(prepare_call(jldeclareconstval_func),
+                            { bp, literal_pointer_val(ctx, (jl_value_t*)mod), literal_pointer_val(ctx, (jl_value_t*)sym), boxed(ctx, rhs) });
+                } else {
+                    ctx.builder.CreateCall(prepare_call(jldeclareconst_func),
+                            { bp, literal_pointer_val(ctx, (jl_value_t*)mod), literal_pointer_val(ctx, (jl_value_t*)sym) });
+                }
+            }
         }
+    }
+    else if (head == jl_globaldecl_sym) {
+        assert(nargs == 2);
+        jl_sym_t *sym = (jl_sym_t*)args[0];
+        jl_module_t *mod = ctx.module;
+        if (jl_is_globalref(sym)) {
+            mod = jl_globalref_mod(sym);
+            sym = jl_globalref_name(sym);
+        }
+        jl_cgval_t typ = emit_expr(ctx, args[1]);
+        ctx.builder.CreateCall(prepare_call(jldeclareglobal_func),
+                { literal_pointer_val(ctx, (jl_value_t*)mod), literal_pointer_val(ctx, (jl_value_t*)sym), boxed(ctx, typ) });
     }
     else if (head == jl_new_sym) {
         bool is_promotable = false;
@@ -9895,7 +9932,7 @@ void jl_compile_workqueue(
                 if (policy != CompilationPolicy::Default &&
                     jl_atomic_load_relaxed(&codeinst->inferred) == jl_nothing) {
                     // Codegen lock is held, so SOURCE_MODE_FORCE_SOURCE_UNCACHED is not required
-                    codeinst = jl_type_infer(codeinst->def, jl_atomic_load_relaxed(&codeinst->max_world), 0, SOURCE_MODE_FORCE_SOURCE);
+                    codeinst = jl_type_infer(codeinst->def, jl_atomic_load_relaxed(&codeinst->max_world), SOURCE_MODE_FORCE_SOURCE);
                 }
                 if (codeinst) {
                     orc::ThreadSafeModule result_m =
