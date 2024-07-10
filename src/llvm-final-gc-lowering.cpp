@@ -103,7 +103,9 @@ void FinalLowerGC::lowerPushGCFrame(CallInst *target, Function &F)
     IRBuilder<> builder(target);
     StoreInst *inst = builder.CreateAlignedStore(
                 ConstantInt::get(T_size, JL_GC_ENCODE_PUSHARGS(nRoots)),
-                builder.CreateConstInBoundsGEP1_32(T_prjlvalue, gcframe, 0, "frame.nroots"),// GEP of 0 becomes a noop and eats the name
+                builder.CreateBitCast(
+                        builder.CreateConstInBoundsGEP1_32(T_prjlvalue, gcframe, 0, "frame.nroots"),
+                        T_size->getPointerTo(), "frame.nroots"), // GEP of 0 becomes a noop and eats the name
                 Align(sizeof(void*)));
     inst->setMetadata(LLVMContext::MD_tbaa, tbaa_gcframe);
     auto T_ppjlvalue = JuliaType::get_ppjlvalue_ty(F.getContext());
@@ -116,7 +118,7 @@ void FinalLowerGC::lowerPushGCFrame(CallInst *target, Function &F)
     inst->setMetadata(LLVMContext::MD_tbaa, tbaa_gcframe);
     builder.CreateAlignedStore(
             gcframe,
-            pgcstack,
+            builder.CreateBitCast(pgcstack, PointerType::get(PointerType::get(T_prjlvalue, 0), 0)),
             Align(sizeof(void*)));
     target->eraseFromParent();
 }
@@ -134,7 +136,8 @@ void FinalLowerGC::lowerPopGCFrame(CallInst *target, Function &F)
     inst->setMetadata(LLVMContext::MD_tbaa, tbaa_gcframe);
     inst = builder.CreateAlignedStore(
         inst,
-        pgcstack,
+        builder.CreateBitCast(pgcstack,
+            PointerType::get(T_prjlvalue, 0)),
         Align(sizeof(void*)));
     inst->setMetadata(LLVMContext::MD_tbaa, tbaa_gcframe);
     target->eraseFromParent();

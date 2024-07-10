@@ -2108,7 +2108,8 @@ void jl_merge_module(orc::ThreadSafeModule &destTSM, orc::ThreadSafeModule srcTS
                     //        Init.push_back(cast_or_null<Constant>(Op));
                     //    for (auto &Op : sCA->operands())
                     //        Init.push_back(cast_or_null<Constant>(Op));
-                    //    ArrayType *ATy = ArrayType::get(PointerType::get(dest.getContext()), Init.size());
+                    //    Type *Int8PtrTy = Type::getInt8PtrTy(dest.getContext());
+                    //    ArrayType *ATy = ArrayType::get(Int8PtrTy, Init.size());
                     //    GlobalVariable *GV = new GlobalVariable(dest, ATy, dG->isConstant(),
                     //            GlobalValue::AppendingLinkage, ConstantArray::get(ATy, Init), "",
                     //            dG->getThreadLocalMode(), dG->getType()->getAddressSpace());

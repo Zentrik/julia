@@ -220,8 +220,10 @@ bool RemoveNoopAddrSpaceCasts(Function *F)
                 if (ASC->getType() == ASC->getOperand(0)->getType()) {
                     ASC->replaceAllUsesWith(ASC->getOperand(0));
                 } else {
-                    // uncanonicalized addrspacecast; just use the value
-                    ASC->replaceAllUsesWith(ASC->getOperand(0));
+                    // uncanonicalized addrspacecast; demote to bitcast
+                    llvm::IRBuilder<> builder(ASC);
+                    auto BC = builder.CreateBitCast(ASC->getOperand(0), ASC->getType());
+                    ASC->replaceAllUsesWith(BC);
                 }
                 NoopCasts.push_back(ASC);
             }
