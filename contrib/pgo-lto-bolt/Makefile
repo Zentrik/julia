@@ -86,7 +86,7 @@ TOOLCHAIN_FLAGS = $\
 	"LDFLAGS+=$(PGO_LDFLAGS)"
 
 $(STAGE0_BUILD) $(STAGE1_BUILD) $(STAGE2_BUILD):
-	$(MAKE) -C $(JULIA_ROOT) O=$@ configure
+	$(MAKE) -C $(JULIA_ROOT) O=$@ configure -d
 
 stage0: export USE_BINARYBUILDER_LLVM=1
 stage0: | $(STAGE0_BUILD)
@@ -102,7 +102,7 @@ stage1: PGO_CXXFLAGS:=-fprofile-generate=$(PGO_PROFILE_DIR) -Xclang -mllvm -Xcla
 stage1: PGO_LDFLAGS:=-fuse-ld=lld -flto=thin -fprofile-generate=$(PGO_PROFILE_DIR)
 stage1: export USE_BINARYBUILDER_LLVM=0
 stage1: | $(STAGE1_BUILD)
-	$(MAKE) -C $(STAGE1_BUILD) $(TOOLCHAIN_FLAGS) && touch $@
+	$(MAKE) -C $(STAGE1_BUILD) $(TOOLCHAIN_FLAGS) -d -j2 && touch $@
 	@echo $(AFTER_STAGE1_MESSAGE)
 
 stage2: PGO_CFLAGS:=-fprofile-use=$(PGO_PROFILE_FILE)
