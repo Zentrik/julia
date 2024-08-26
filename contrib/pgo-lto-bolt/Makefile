@@ -33,7 +33,7 @@ BOLT_ARGS += -skip-funcs=.\*apply_cl.\*
 
 # -fno-reorder-blocks-and-partition is needed on gcc >= 8.
 BOLT_FLAGS := $\
-	"BOLT_CFLAGS_GCC+=-fno-reorder-blocks-and-partition" $\
+	"BOLT_CFLAGS_GCC=-fno-reorder-blocks-and-partition" $\
 	"BOLT_LDFLAGS=-Wl,--emit-relocs"
 
 STAGE0_BUILD:=$(CURDIR)/toolchain
@@ -46,7 +46,6 @@ STAGE0_TOOLS:=$(STAGE0_BUILD)/usr/tools/
 BOLT_PROFILE_DIR:=$(CURDIR)/profiles-bolt
 PGO_PROFILE_DIR:=$(CURDIR)/profiles
 PGO_PROFILE_FILE:=$(PGO_PROFILE_DIR)/merged.prof
-PGO_PROFRAW_FILES:=$(wildcard $(PGO_PROFILE_DIR)/*.profraw)
 JULIA_ROOT:=$(CURDIR)/../..
 
 LLVM_BOLT:=$(STAGE0_BINARIES)llvm-bolt
@@ -85,6 +84,17 @@ TOOLCHAIN_FLAGS = $\
 	"CXXFLAGS+=$(PGO_CXXFLAGS)" $\
 	"LDFLAGS+=-fuse-ld=lld $(PGO_LDFLAGS)"
 
+STAGE1_PGO_FLAGS:=LDFLAGS="-fuse-ld=lld -flto=thin -Wl,--undefined-version -fprofile-generate=$(PROFILE_DIR)" $\
+			CFLAGS="-fprofile-generate=$(PROFILE_DIR) -Xclang -mllvm -Xclang -vp-counters-per-site=$(COUNTERS_PER_SITE)" $\
+			CXXFLAGS="-fprofile-generate=$(PROFILE_DIR) -Xclang -mllvm -Xclang -vp-counters-per-site=$(COUNTERS_PER_SITE)"
+STAGE2_PGO_FLAGS:=LDFLAGS="-fuse-ld=lld -flto=thin -Wl,--undefined-version -fprofile-use=$(PROFILE_FILE) -Wl,--icf=safe" $\
+			CFLAGS="-fprofile-use=$(PROFILE_FILE)" $\
+			CXXFLAGS="-fprofile-use=$(PROFILE_FILE)"
+
+COMMON_FLAGS:=USECLANG=1 USE_BINARYBUILDER_LLVM=0
+
+all: stage1 stage2 copy_originals bolt_instrument finish_stage2 merge_data bolt
+
 $(STAGE0_BUILD) $(STAGE1_BUILD) $(STAGE2_BUILD):
 	$(MAKE) -C $(JULIA_ROOT) O=$@ configure
 
@@ -97,24 +107,18 @@ stage0: | $(STAGE0_BUILD)
 	touch $@
 
 $(STAGE1_BUILD): stage0
-stage1: PGO_CFLAGS:=-fprofile-generate=$(PGO_PROFILE_DIR) -Xclang -mllvm -Xclang -vp-counters-per-site=$(COUNTERS_PER_SITE)
-stage1: PGO_CXXFLAGS:=-fprofile-generate=$(PGO_PROFILE_DIR) -Xclang -mllvm -Xclang -vp-counters-per-site=$(COUNTERS_PER_SITE)
-stage1: PGO_LDFLAGS:=-flto=thin -fprofile-generate=$(PGO_PROFILE_DIR)
-stage1: export USE_BINARYBUILDER_LLVM=0
 stage1: | $(STAGE1_BUILD)
-	$(MAKE) -C $(STAGE1_BUILD) $(TOOLCHAIN_FLAGS) && touch $@
+	@echo "--- Build Julia Stage 1 - with instrumentation"
+	PATH=$(STAGE0_TOOLS):$$PATH $(STAGE1_PGO_FLAGS) $(MAKE) -C $(STAGE1_BUILD) $(COMMON_FLAGS) && touch $@
 	@echo $(AFTER_STAGE1_MESSAGE)
 
-stage2: PGO_CFLAGS:=-fprofile-use=$(PGO_PROFILE_FILE)
-stage2: PGO_CXXFLAGS:=-fprofile-use=$(PGO_PROFILE_FILE)
-stage2: PGO_LDFLAGS:=-flto=thin -fprofile-use=$(PGO_PROFILE_FILE) -Wl,--icf=safe
-stage2: export USE_BINARYBUILDER_LLVM=0
 stage2: $(PGO_PROFILE_FILE) | $(STAGE2_BUILD)
-	$(MAKE) -C $(STAGE2_BUILD) $(TOOLCHAIN_FLAGS) $(BOLT_FLAGS) julia-src-release julia-symlink julia-libccalltest \
-								julia-libccalllazyfoo julia-libccalllazybar julia-libllvmcalltest && \
+	@echo "--- Build Julia Stage 2 - PGO + LTO optimised"
+	PATH=$(STAGE0_TOOLS):$$PATH $(STAGE2_PGO_FLAGS) $(MAKE) -C $(STAGE2_BUILD) $(COMMON_FLAGS) $(BOLT_FLAGS) julia-src-release && touch $@
 	touch $@
 
 copy_originals: stage2
+	@echo "--- Copying original shared libraries"
 	for file in $(FILES_TO_OPTIMIZE); do \
 		abs_file=$(STAGE2_BUILD)/usr/lib/$$file; \
 		cp $$abs_file "$$abs_file.original"; \
@@ -125,6 +129,7 @@ copy_originals: stage2
 # as the final build uses -no-huge-pages
 # We reset the mtime of the files to prevent make from rebuilding targets depending on them.
 bolt_instrument: copy_originals
+	@echo "--- Instrumenting with BOLT"
 	for file in $(FILES_TO_OPTIMIZE); do \
 		abs_file=$(STAGE2_BUILD)/usr/lib/$$file; \
 		old_time=$$(stat -c %Y $$abs_file); \
@@ -136,13 +141,15 @@ bolt_instrument: copy_originals
 	touch $@
 	@echo $(AFTER_INSTRUMENT_MESSAGE)
 
-finish_stage2: PGO_CFLAGS:=-fprofile-use=$(PGO_PROFILE_FILE)
-finish_stage2: PGO_CXXFLAGS:=-fprofile-use=$(PGO_PROFILE_FILE)
-finish_stage2: PGO_LDFLAGS:=-flto=thin -fprofile-use=$(PGO_PROFILE_FILE) -Wl,--icf=safe
 finish_stage2: stage2
-	$(MAKE) -C $(STAGE2_BUILD) $(TOOLCHAIN_FLAGS)
+	@echo "--- Finishing and Profiling Julia Stage 2"
+	PATH=$(STAGE0_TOOLS):$$PATH $(STAGE2_PGO_FLAGS) $(MAKE) -C $(STAGE2_BUILD) $(COMMON_FLAGS)
+
+.DEFAULT: finish_stage2
+	PATH=$(STAGE0_TOOLS):$$PATH $(STAGE2_PGO_FLAGS) $(MAKE) -C $(STAGE2_BUILD) $(COMMON_FLAGS) $@
 
 merge_data: bolt_instrument
+	@echo "--- Merging BOLT Profiles"
 	for file in $(FILES_TO_OPTIMIZE); do \
 		profiles=$(BOLT_PROFILE_DIR)/$$file-prof.*.fdata; \
 		$(LLVM_MERGEFDATA) $$profiles > "$(BOLT_PROFILE_DIR)/$$file-prof.merged.fdata"; \
@@ -156,13 +163,14 @@ merge_data: bolt_instrument
 # That flag saves less than 1 MiB for libjulia-internal so oh well.
 # We reset the mtime of the files to prevent make from rebuilding targets depending on them.
 bolt: merge_data
+	@echo "--- Optimizing Julia Stage 2 with BOLT"
 	for file in $(FILES_TO_OPTIMIZE); do \
-        abs_file=$(STAGE2_BUILD)/usr/lib/$$file; \
+		abs_file=$(STAGE2_BUILD)/usr/lib/$$file; \
 		old_time=$$(stat -c %Y $$abs_file); \
 		$(LLVM_BOLT) "$$abs_file.original" -data "$(BOLT_PROFILE_DIR)/$$file-prof.merged.fdata" -o $$abs_file $(BOLT_ARGS) $$(if [ "$$file" != $(shell readlink $(STAGE2_BUILD)/usr/lib/libjulia-internal.so) ]; then echo "--use-old-text -split-strategy=cdsplit"; fi); \
 		touch -d "@$$old_time" $$abs_file; \
-    done && \
-    touch $@
+	done && \
+	touch $@
 
 clean_profiles:
 	rm -rf $(PGO_PROFILE_DIR) $(BOLT_PROFILE_DIR)
@@ -182,8 +190,8 @@ delete_originals: copy_originals
 		rm "$$abs_file.original"; \
 	done
 
-$(PGO_PROFILE_FILE): stage1 $(PGO_PROFRAW_FILES)
-	$(LLVM_PROFDATA) merge -output=$@ $(PGO_PROFRAW_FILES)
+$(PGO_PROFILE_FILE): stage1 $(wildcard $(PGO_PROFILE_DIR)/*.profraw)
+	$(LLVM_PROFDATA) merge -output=$@ $(PGO_PROFILE_DIR)/*.profraw
 
 # show top 50 functions
 top: $(PGO_PROFILE_FILE)
