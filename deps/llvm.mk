@@ -3,6 +3,23 @@ include $(SRCDIR)/llvm.version
 include $(SRCDIR)/llvm-ver.make
 include $(SRCDIR)/llvm-options.mk
 
+# We provide a way to subversively swap out which LLVM JLL we pull artifacts from
+ifeq ($(LLVM_ASSERTIONS), 1)
+# LLVM_JLL_DOWNLOAD_NAME := libLLVM_assert
+# LLVM_JLL_VER := $(LLVM_ASSERT_JLL_VER)
+# LLVM_TOOLS_JLL_DOWNLOAD_NAME := LLVM_assert
+# LLVM_TOOLS_JLL_VER := $(LLVM_TOOLS_ASSERT_JLL_VER)
+LLVM_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
+CLANG_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
+LLD_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
+LLVM_TOOLS_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
+else
+LLVM_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
+CLANG_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
+LLD_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
+LLVM_TOOLS_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
+endif
+
 ifneq ($(USE_BINARYBUILDER_LLVM), 1)
 LLVM_GIT_URL:=https://github.com/JuliaLang/llvm-project.git
 LLVM_TAR_URL=https://api.github.com/repos/JuliaLang/llvm-project/tarball/$1
@@ -40,6 +57,8 @@ LLVM_ENABLE_RUNTIMES :=
 ifeq ($(BUILD_LLVM_CLANG), 1)
 LLVM_ENABLE_PROJECTS := $(LLVM_ENABLE_PROJECTS);clang
 LLVM_ENABLE_RUNTIMES := $(LLVM_ENABLE_RUNTIMES);compiler-rt
+else
+$(eval $(call bb-install,clang,CLANG,false,true))
 endif
 ifeq ($(USE_POLLY), 1)
 LLVM_ENABLE_PROJECTS := $(LLVM_ENABLE_PROJECTS);polly
@@ -58,6 +77,8 @@ LLVM_ENABLE_RUNTIMES := $(LLVM_ENABLE_RUNTIMES);libcxx;libcxxabi
 endif
 ifeq ($(BUILD_LLD), 1)
 LLVM_ENABLE_PROJECTS := $(LLVM_ENABLE_PROJECTS);lld
+else
+$(eval $(call bb-install,lld,LLD,false,true))
 endif
 
 
@@ -315,23 +336,6 @@ endif
 #todo: LLVM make check target is broken on julia.mit.edu (and really slow elsewhere)
 
 else # USE_BINARYBUILDER_LLVM
-
-# We provide a way to subversively swap out which LLVM JLL we pull artifacts from
-ifeq ($(LLVM_ASSERTIONS), 1)
-# LLVM_JLL_DOWNLOAD_NAME := libLLVM_assert
-# LLVM_JLL_VER := $(LLVM_ASSERT_JLL_VER)
-# LLVM_TOOLS_JLL_DOWNLOAD_NAME := LLVM_assert
-# LLVM_TOOLS_JLL_VER := $(LLVM_TOOLS_ASSERT_JLL_VER)
-LLVM_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
-CLANG_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
-LLD_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
-LLVM_TOOLS_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ).asserts
-else
-LLVM_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
-CLANG_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
-LLD_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
-LLVM_TOOLS_JLL_TAGS := -llvm_version+$(LLVM_VER_MAJ)
-endif
 
 $(eval $(call bb-install,llvm,LLVM,false,true))
 $(eval $(call bb-install,lld,LLD,false,true))
