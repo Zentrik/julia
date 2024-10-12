@@ -175,7 +175,7 @@ static bool lowerExcHandlers(Function &F) {
     unsigned allocaAddressSpace = F.getParent()->getDataLayout().getAllocaAddrSpace();
     for (int i = 0; i < MaxDepth; ++i) {
         auto *buff = new AllocaInst(Type::getInt8Ty(F.getContext()), allocaAddressSpace,
-                handler_sz, Align(16), "", firstInst);
+                handler_sz, Align(16), "", firstInst->getIterator());
         if (allocaAddressSpace) {
             AddrSpaceCastInst *buff_casted = new AddrSpaceCastInst(buff, PointerType::get(F.getContext(), AddressSpace::Generic));
             buff_casted->insertAfter(buff);
@@ -190,17 +190,17 @@ static bool lowerExcHandlers(Function &F) {
         assert(it.second >= 0);
         Instruction *buff = buffs[it.second];
         CallInst *enter = it.first;
-        auto new_enter = CallInst::Create(jlenter_func, {enter->getArgOperand(0), buff}, "", enter);
+        auto new_enter = CallInst::Create(jlenter_func, {enter->getArgOperand(0), buff}, "", enter->getIterator());
         Value *lifetime_args[] = {
             handler_sz64,
             buff
         };
-        CallInst::Create(lifetime_start, lifetime_args, "", new_enter);
+        CallInst::Create(lifetime_start, lifetime_args, "", new_enter->getIterator());
         CallInst *sj;
         if (!TT.isOSWindows()) {
-            sj = CallInst::Create(setjmp_func, {buff, ConstantInt::get(Type::getInt32Ty(F.getContext()), 0)}, "", enter);
+            sj = CallInst::Create(setjmp_func, {buff, ConstantInt::get(Type::getInt32Ty(F.getContext()), 0)}, "", enter->getIterator());
         } else {
-            sj = CallInst::Create(setjmp_func, buff, "", enter);
+            sj = CallInst::Create(setjmp_func, buff, "", enter->getIterator());
         }
         // We need to mark this on the call site as well. See issue #6757
         sj->setCanReturnTwice();
@@ -223,8 +223,8 @@ static bool lowerExcHandlers(Function &F) {
         for (auto *EEI : ToErase)
             EEI->eraseFromParent();
         if (!enter->use_empty()) {
-            Value *agg = InsertValueInst::Create(UndefValue::get(enter->getType()), sj, ArrayRef<unsigned>(0), "", enter);
-            agg = InsertValueInst::Create(agg, buff, ArrayRef<unsigned>(1), "", enter);
+            Value *agg = InsertValueInst::Create(UndefValue::get(enter->getType()), sj, ArrayRef<unsigned>(0), "", enter->getIterator());
+            agg = InsertValueInst::Create(agg, buff, ArrayRef<unsigned>(1), "", enter->getIterator());
             enter->replaceAllUsesWith(agg);
         }
         enter->eraseFromParent();

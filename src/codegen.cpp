@@ -2393,7 +2393,7 @@ static GlobalVariable *get_pointer_to_constant(jl_codegen_params_t &emission_con
 static AllocaInst *emit_static_alloca(jl_codectx_t &ctx, Type *lty, Align align)
 {
     ++EmittedAllocas;
-    return new AllocaInst(lty, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), nullptr, align, "", /*InsertBefore=*/ctx.topalloca);
+    return new AllocaInst(lty, ctx.topalloca->getModule()->getDataLayout().getAllocaAddrSpace(), nullptr, align, "", /*InsertBefore=*/ctx.topalloca->getIterator());
 }
 
 static AllocaInst *emit_static_alloca(jl_codectx_t &ctx, unsigned nb, Align align)
@@ -9909,10 +9909,10 @@ static jl_llvm_functions_t
                     // TODO: inference is invalid if this has any effect (which it often does)
                     LoadInst *world = new LoadInst(ctx.types().T_size,
                         prepare_global_in(jl_Module, jlgetworld_global), Twine(),
-                        /*isVolatile*/false, ctx.types().alignof_ptr, /*insertBefore*/&I);
+                        /*isVolatile*/false, ctx.types().alignof_ptr, /*insertBefore*/I.getIterator());
                     world->setOrdering(AtomicOrdering::Acquire);
                     StoreInst *store_world = new StoreInst(world, world_age_field,
-                        /*isVolatile*/false, ctx.types().alignof_ptr, /*insertBefore*/&I);
+                        /*isVolatile*/false, ctx.types().alignof_ptr, /*insertBefore*/I.getIterator());
                     (void)store_world;
                 }
             }
