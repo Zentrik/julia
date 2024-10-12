@@ -2122,7 +2122,7 @@ jl_cgval_t function_sig_t::emit_a_ccall(
             }
             else if (f_name.starts_with("llvm.")) {
                 // compute and verify auto-mangling for intrinsic name
-                auto ID = Function::lookupIntrinsicID(f_name);
+                auto ID = Intrinsic::lookupIntrinsicID(f_name);
                 if (ID != Intrinsic::not_intrinsic) {
                     // Accumulate an array of overloaded types for the given intrinsic
                     // and compute the new name mangling schema
