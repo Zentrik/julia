@@ -115,8 +115,8 @@ static bool lowerExcHandlers(Function &F) {
     Function *jlenter_func = M.getFunction(XSTR(jl_enter_handler));
     Function *setjmp_func = M.getFunction(jl_setjmp_name);
     auto T_ptr = PointerType::get(M.getContext(), 0);
-    Function *lifetime_start = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_start, { T_ptr });
-    Function *lifetime_end = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_end, { T_ptr });
+    Function *lifetime_start = Intrinsic::getOrInsertDeclaration(&M, Intrinsic::lifetime_start, { T_ptr });
+    Function *lifetime_end = Intrinsic::getOrInsertDeclaration(&M, Intrinsic::lifetime_end, { T_ptr });
 
     /* Step 1: EH Depth Numbering */
     std::map<llvm::CallInst *, int> EnterDepth;

@@ -603,7 +603,7 @@ void Optimizer::replaceIntrinsicUseWith(IntrinsicInst *call, Intrinsic::ID ID,
         assert(matchvararg);
         (void)matchvararg;
     }
-    auto newF = Intrinsic::getDeclaration(call->getModule(), ID, overloadTys);
+    auto newF = Intrinsic::getOrInsertDeclaration(call->getModule(), ID, overloadTys);
     assert(newF->getFunctionType() == newfType);
     newF->setCallingConv(call->getCallingConv());
     auto newCall = CallInst::Create(newF, args, "", call->getIterator());
@@ -1261,8 +1261,8 @@ bool AllocOpt::doInitialization(Module &M)
 
     DL = &M.getDataLayout();
 
-    lifetime_start = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_start, { PointerType::get(M.getContext(), DL->getAllocaAddrSpace()) });
-    lifetime_end = Intrinsic::getDeclaration(&M, Intrinsic::lifetime_end, { PointerType::get(M.getContext(), DL->getAllocaAddrSpace()) });
+    lifetime_start = Intrinsic::getOrInsertDeclaration(&M, Intrinsic::lifetime_start, { PointerType::get(M.getContext(), DL->getAllocaAddrSpace()) });
+    lifetime_end = Intrinsic::getOrInsertDeclaration(&M, Intrinsic::lifetime_end, { PointerType::get(M.getContext(), DL->getAllocaAddrSpace()) });
 
     return true;
 }

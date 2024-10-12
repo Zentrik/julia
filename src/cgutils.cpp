@@ -3727,7 +3727,7 @@ static Value *box_union(jl_codectx_t &ctx, const jl_cgval_t &vinfo, const SmallB
         ctx.builder.CreateBr(postBB);
     }
     else if (!vinfo.Vboxed) {
-        Function *trap_func = Intrinsic::getDeclaration(
+        Function *trap_func = Intrinsic::getOrInsertDeclaration(
                 ctx.f->getParent(),
                 Intrinsic::trap);
         ctx.builder.CreateCall(trap_func);
@@ -3771,7 +3771,7 @@ static Function *mangleIntrinsic(IntrinsicInst *call) //mangling based on replac
         assert(matchvararg);
         (void)matchvararg;
     }
-    auto newF = Intrinsic::getDeclaration(call->getModule(), ID, overloadTys);
+    auto newF = Intrinsic::getOrInsertDeclaration(call->getModule(), ID, overloadTys);
     assert(newF->getFunctionType() == newfType);
     newF->setCallingConv(call->getCallingConv());
     return newF;
@@ -3915,7 +3915,7 @@ static void emit_unionmove(jl_codectx_t &ctx, Value *dest, MDNode *tbaa_dst, con
                     if (nb > 0) {
                         if (!src_ptr) {
                             Function *trap_func =
-                                Intrinsic::getDeclaration(ctx.f->getParent(), Intrinsic::trap);
+                                Intrinsic::getOrInsertDeclaration(ctx.f->getParent(), Intrinsic::trap);
                             ctx.builder.CreateCall(trap_func);
                             ctx.builder.CreateUnreachable();
                             return;
@@ -3930,7 +3930,7 @@ static void emit_unionmove(jl_codectx_t &ctx, Value *dest, MDNode *tbaa_dst, con
                 counter);
         ctx.builder.SetInsertPoint(defaultBB);
         if (!skip && allunboxed && (src.V == NULL || isa<AllocaInst>(src.V))) {
-            Function *trap_func = Intrinsic::getDeclaration(
+            Function *trap_func = Intrinsic::getOrInsertDeclaration(
                     ctx.f->getParent(),
                     Intrinsic::trap);
             ctx.builder.CreateCall(trap_func);
@@ -4597,7 +4597,7 @@ static jl_cgval_t emit_memoryref(jl_codectx_t &ctx, const jl_cgval_t &ref, jl_cg
         Value *boffset;
 #if 0
         if (bc) {
-            auto *MulF = Intrinsic::getDeclaration(jl_Module, Intrinsic::smul_with_overflow, offset->getType());
+            auto *MulF = Intrinsic::getOrInsertDeclaration(jl_Module, Intrinsic::smul_with_overflow, offset->getType());
             CallInst *Mul = ctx.builder.CreateCall(MulF, {offset, elsz});
             boffset = ctx.builder.CreateExtractValue(Mul, 0);
             ovflw = ctx.builder.CreateExtractValue(Mul, 1);
