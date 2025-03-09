@@ -2145,7 +2145,7 @@ void jl_dump_native_impl(void *native_code,
         LLVMContext Context;
         Context.setDiscardValueNames(true);
         Module sysimgM("sysimg", Context);
-        sysimgM.setTargetTriple(TheTriple.str());
+        sysimgM.setTargetTriple(TheTriple);
         sysimgM.setDataLayout(DL);
         sysimgM.setStackProtectorGuard(StackProtectorGuard);
         sysimgM.setOverrideStackAlignment(OverrideStackAlignment);
@@ -2213,7 +2213,7 @@ void jl_dump_native_impl(void *native_code,
 
     data->M.withModuleDo([&](Module &dataM) {
         JL_TIMING(NATIVE_AOT, NATIVE_Setup);
-        dataM.setTargetTriple(TheTriple.str());
+        dataM.setTargetTriple(TheTriple);
         dataM.setDataLayout(DL);
         dataM.setPICLevel(PICLevel::BigPIC);
         auto &Context = dataM.getContext();
@@ -2314,7 +2314,7 @@ void jl_dump_native_impl(void *native_code,
         LLVMContext Context;
         Context.setDiscardValueNames(true);
         Module metadataM("metadata", Context);
-        metadataM.setTargetTriple(TheTriple.str());
+        metadataM.setTargetTriple(TheTriple);
         metadataM.setDataLayout(DL);
         metadataM.setStackProtectorGuard(StackProtectorGuard);
         metadataM.setOverrideStackAlignment(OverrideStackAlignment);

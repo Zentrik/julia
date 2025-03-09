@@ -2694,7 +2694,7 @@ std::unique_ptr<Module> jl_create_llvm_module(StringRef name, LLVMContext &conte
         m->addModuleFlag(llvm::Module::Warning, "Debug Info Version",
             llvm::DEBUG_METADATA_VERSION);
     m->setDataLayout(DL);
-    m->setTargetTriple(triple.str());
+    m->setTargetTriple(triple);
 
     if (triple.isOSWindows() && triple.getArch() == Triple::x86) {
         // tell Win32 to assume the stack is always 16-byte aligned,
