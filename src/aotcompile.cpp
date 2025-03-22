@@ -1531,7 +1531,7 @@ static AOTOutputs add_output_impl(Module &M, TargetMachine &SourceTM, ShardTimer
     AOTOutputs out;
     auto TM = std::unique_ptr<TargetMachine>(
         SourceTM.getTarget().createTargetMachine(
-            SourceTM.getTargetTriple().str(),
+            SourceTM.getTargetTriple(),
             SourceTM.getTargetCPU(),
             SourceTM.getTargetFeatureString(),
             SourceTM.Options,
@@ -1559,7 +1559,7 @@ static AOTOutputs add_output_impl(Module &M, TargetMachine &SourceTM, ShardTimer
 
         auto PMTM = std::unique_ptr<TargetMachine>(
             SourceTM.getTarget().createTargetMachine(
-                SourceTM.getTargetTriple().str(),
+                SourceTM.getTargetTriple(),
                 SourceTM.getTargetCPU(),
                 SourceTM.getTargetFeatureString(),
                 SourceTM.Options,
@@ -2112,7 +2112,7 @@ void jl_dump_native_impl(void *native_code,
     }
     std::unique_ptr<TargetMachine> SourceTM(
         jl_ExecutionEngine->getTarget().createTargetMachine(
-            TheTriple.getTriple(),
+            TheTriple,
             jl_ExecutionEngine->getTargetCPU(),
             jl_ExecutionEngine->getTargetFeatureString(),
             jl_ExecutionEngine->getTargetOptions(),

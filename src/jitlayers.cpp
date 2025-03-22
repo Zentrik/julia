@@ -1398,7 +1398,7 @@ namespace {
         }
         auto optlevel = CodeGenOptLevelFor(jl_options.opt_level);
         auto TM = TheTarget->createTargetMachine(
-                TheTriple.getTriple(), TheCPU, FeaturesStr,
+                TheTriple, TheCPU, FeaturesStr,
                 options,
                 relocmodel,
                 codemodel,
@@ -2366,7 +2366,7 @@ std::unique_ptr<TargetMachine> JuliaOJIT::cloneTargetMachine() const
 {
     auto NewTM = std::unique_ptr<TargetMachine>(getTarget()
         .createTargetMachine(
-            getTargetTriple().str(),
+            getTargetTriple(),
             getTargetCPU(),
             getTargetFeatureString(),
             getTargetOptions(),
