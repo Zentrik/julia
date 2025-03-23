@@ -1310,7 +1310,7 @@ extern "C" jl_code_instance_t *jl_gdblookupci(void *p) JL_NOTSAFEPOINT
  */
 
 // This implementation handles frame registration for local targets.
-void register_eh_frames(uint8_t *Addr, size_t Size)
+extern "C" void register_eh_frames(uint8_t *Addr, size_t Size)
 {
   // On OS X OS X __register_frame takes a single FDE as an argument.
   // See http://lists.cs.uiuc.edu/pipermail/llvmdev/2013-April/061768.html
@@ -1319,7 +1319,7 @@ void register_eh_frames(uint8_t *Addr, size_t Size)
     });
 }
 
-void deregister_eh_frames(uint8_t *Addr, size_t Size)
+extern "C" void deregister_eh_frames(uint8_t *Addr, size_t Size)
 {
    processFDEs((char*)Addr, Size, [](const char *Entry) JL_NOTSAFEPOINT {
       getJITDebugRegistry().libc_frames.libc_deregister_frame(Entry);
@@ -1505,7 +1505,7 @@ static DW_EH_PE parseCIE(const uint8_t *Addr, const uint8_t *End) JL_NOTSAFEPOIN
     return DW_EH_PE_absptr;
 }
 
-void register_eh_frames(uint8_t *Addr, size_t Size)
+extern "C" void register_eh_frames(uint8_t *Addr, size_t Size)
 {
     // System unwinder
     jl_profile_atomic([&]() JL_NOTSAFEPOINT {
@@ -1641,7 +1641,7 @@ void register_eh_frames(uint8_t *Addr, size_t Size)
     });
 }
 
-void deregister_eh_frames(uint8_t *Addr, size_t Size)
+extern "C" void deregister_eh_frames(uint8_t *Addr, size_t Size)
 {
     jl_profile_atomic([&]() JL_NOTSAFEPOINT {
         __deregister_frame(Addr);
@@ -1653,11 +1653,11 @@ void deregister_eh_frames(uint8_t *Addr, size_t Size)
 
 #else
 
-void register_eh_frames(uint8_t *Addr, size_t Size)
+extern "C" void register_eh_frames(uint8_t *Addr, size_t Size)
 {
 }
 
-void deregister_eh_frames(uint8_t *Addr, size_t Size)
+extern "C" void deregister_eh_frames(uint8_t *Addr, size_t Size)
 {
 }
 

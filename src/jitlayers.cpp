@@ -15,9 +15,11 @@
 #include <llvm/ExecutionEngine/Orc/ExecutionUtils.h>
 #include <llvm/ExecutionEngine/Orc/DebugObjectManagerPlugin.h>
 #include <llvm/ExecutionEngine/Orc/TargetProcess/JITLoaderGDB.h>
+#if JL_LLVM_VERSION >= 210000
+#include <llvm/ExecutionEngine/Orc/EHFrameRegistrationPlugin.h>
+#endif
 #if JL_LLVM_VERSION >= 200000
 #include <llvm/ExecutionEngine/Orc/AbsoluteSymbols.h>
-#include <llvm/ExecutionEngine/Orc/EHFrameRegistrationPlugin.h>
 #endif
 #if JL_LLVM_VERSION >= 180000
 #include <llvm/ExecutionEngine/Orc/Debugging/DebugInfoSupport.h>
@@ -1220,18 +1222,6 @@ std::unique_ptr<jitlink::JITLinkMemoryManager> createJITLinkMemoryManager() JL_N
 #endif
 }
 
-class JLEHFrameRegistrar final : public jitlink::EHFrameRegistrar {
-public:
-    Error registerEHFrames(orc::ExecutorAddrRange EHFrameSection) override {
-        register_eh_frames(EHFrameSection.Start.toPtr<uint8_t *>(), static_cast<size_t>(EHFrameSection.size()));
-        return Error::success();
-    }
-
-    Error deregisterEHFrames(orc::ExecutorAddrRange EHFrameSection) override {
-        deregister_eh_frames(EHFrameSection.Start.toPtr<uint8_t *>(), static_cast<size_t>(EHFrameSection.size()));
-        return Error::success();
-    }
-};
 
 RTDyldMemoryManager *createRTDyldMemoryManager(void) JL_NOTSAFEPOINT;
 
@@ -1923,12 +1913,12 @@ JuliaOJIT::JuliaOJIT()
 # if defined(LLVM_SHLIB)
     // When dynamically linking against LLVM, use our custom EH frame registration code
     // also used with RTDyld to inform both our and the libc copy of libunwind.
-    auto ehRegistrar = std::make_unique<JLEHFrameRegistrar>();
+    ObjectLayer.addPlugin(std::make_unique<llvm::orc::EHFrameRegistrationPlugin>(
+        ExecutorAddr::fromPtr(&register_eh_frames), ExecutorAddr::fromPtr(&deregister_eh_frames)));
 # else
-    auto ehRegistrar = std::make_unique<jitlink::InProcessEHFrameRegistrar>();
+    ObjectLayer.addPlugin(llvm::orc::EHFrameRegistrationPlugin::Create(ES));
 # endif
-    ObjectLayer.addPlugin(std::make_unique<EHFrameRegistrationPlugin>(
-        ES, std::move(ehRegistrar)));
+
 
     ObjectLayer.addPlugin(std::make_unique<JLDebuginfoPlugin>());
     ObjectLayer.addPlugin(std::make_unique<JLMemoryUsagePlugin>(&jit_bytes_size));
