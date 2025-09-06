@@ -504,7 +504,10 @@ static int lookup_pointer(
         else {
             int havelock = jl_lock_profile_wr();
             assert(havelock); (void)havelock;
-            info = context->getLineInfoForAddress(makeAddress(Section, pointer + slide), infoSpec);
+            auto info_opt = context->getLineInfoForAddress(makeAddress(Section, pointer + slide), infoSpec);
+            if (info_opt) {
+                info = *info_opt;
+            }
             jl_unlock_profile_wr();
         }
 
