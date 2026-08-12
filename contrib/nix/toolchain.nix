@@ -18,6 +18,8 @@
 
 let
   posixThreadsOverlay = final: prev: {
+    # nixpkgs <= 25.05: GCC's thread model comes from the top-level
+    # `threadsCross` attribute (keyed on the *target* platform).
     threadsCross =
       prev.lib.optionalAttrs
         (prev.stdenv.targetPlatform.isMinGW && !(prev.stdenv.targetPlatform.useLLVM or false))
@@ -31,6 +33,22 @@ let
           package =
             final.targetPackages.windows.mingw_w64_pthreads or final.windows.mingw_w64_pthreads
               or final.targetPackages.windows.pthreads or final.windows.pthreads;
+        };
+
+    # nixpkgs > 25.05 (master as of late 2025): `threadsCross` was replaced
+    # by a top-level `threads` attribute keyed on the *host* platform (GCC
+    # consumes it as `targetPackages.threads or pkgs.threads`).  Overriding
+    # only the old attribute would silently keep the mcf model there, so set
+    # both; each nixpkgs version simply ignores the attribute it doesn't
+    # consume.
+    threads =
+      prev.lib.optionalAttrs
+        (prev.stdenv.hostPlatform.isMinGW && !(prev.stdenv.hostPlatform.useLLVM or false))
+        {
+          model = "posix";
+          # On nixpkgs new enough to consume `threads`, winpthreads is
+          # `windows.pthreads`; keep the old name as a fallback anyway.
+          package = final.windows.pthreads or final.windows.mingw_w64_pthreads;
         };
   };
 
