@@ -145,7 +145,12 @@ pkgs.stdenv.mkDerivation {
 
   buildPhase = ''
     runHook preBuild
-    make -j$NIX_BUILD_CORES
+    # Build everything with full parallelism except the stdlib package-image
+    # precompiles: each of those runs julia.exe under wine, and concurrent
+    # wine process storms fail flakily (process spawn errors with no
+    # diagnostics), so finish that last stage serially.
+    make -j$NIX_BUILD_CORES julia-release
+    make -j1
     runHook postBuild
   '';
 
