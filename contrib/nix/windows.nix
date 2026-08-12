@@ -23,6 +23,11 @@ pkgs.mkShell {
     tc.wine
   ] ++ tc.nativeTools;
 
+  # -fstack-clash-protection makes GCC 13 ICE on mingw when emitting SEH
+  # unwind info for large stack frames (gcc PR90458, fixed in GCC 14; hit by
+  # cli/loader_win_utils.c).
+  hardeningDisable = [ "stackclashprotection" ];
+
   env = {
     # Picked up by Make.inc (same as putting them in Make.user):
     # XC_HOST switches the build to a Windows cross-compile, WINE is used to

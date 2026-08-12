@@ -88,9 +88,13 @@ let
 
     installPhase = ''
       runHook preInstall
-      mkdir -p $out
-      cp -r deps/srccache $out/deps
-      cp -r stdlib/srccache $out/stdlib
+      # Mirror the source-tree layout: the download caches, plus the
+      # StdlibArtifacts.toml files that `stdlib getall` fetches *into the
+      # source tree* (stdlib/<name>_jll/) rather than into a cache.
+      mkdir -p $out/deps $out/stdlib
+      cp -r deps/srccache $out/deps/srccache
+      cp -r stdlib/srccache $out/stdlib/srccache
+      find stdlib -maxdepth 2 -name StdlibArtifacts.toml -exec cp --parents {} $out \;
       runHook postInstall
     '';
 
@@ -113,11 +117,11 @@ pkgs.stdenv.mkDerivation {
   configurePhase = ''
     runHook preConfigure
 
-    # Pre-populate the download caches; the Makefiles skip downloads for
-    # files that are already present (and checksum-verified).
-    cp -r ${depsCache}/deps deps/srccache
-    cp -r ${depsCache}/stdlib stdlib/srccache
-    chmod -R u+w deps/srccache stdlib/srccache
+    # Pre-populate the download caches and pre-fetched StdlibArtifacts.toml
+    # files; the Makefiles skip downloads for files that are already present
+    # (and checksum-verified).
+    cp -r --no-preserve=mode,ownership ${depsCache}/deps/. deps/
+    cp -r --no-preserve=mode,ownership ${depsCache}/stdlib/. stdlib/
 
     cat > Make.user <<EOF
     XC_HOST = ${tc.xcHost}
@@ -159,6 +163,12 @@ pkgs.stdenv.mkDerivation {
   # The output is a Windows installation tree: no ELF patching, stripping,
   # or shebang rewriting wanted.
   dontFixup = true;
+
+  # -fstack-clash-protection makes GCC 13 ICE on mingw when emitting SEH
+  # unwind info for large stack frames (gcc PR90458, fixed in GCC 14; hit by
+  # cli/loader_win_utils.c).  Everything else in nixpkgs' default hardening
+  # set is fine with the mingw toolchain.
+  hardeningDisable = [ "stackclashprotection" ];
 
   passthru = {
     inherit depsCache;
