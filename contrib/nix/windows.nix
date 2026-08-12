@@ -31,9 +31,13 @@ pkgs.mkShell {
   env = {
     # Picked up by Make.inc (same as putting them in Make.user):
     # XC_HOST switches the build to a Windows cross-compile, WINE is used to
-    # spawn Windows executables during the build.
+    # spawn Windows executables during the build.  The explicit -L for
+    # winpthreads is needed by libtool-based deps in from-source builds
+    # (libtool cannot see the equivalent flag baked into the cc wrapper and
+    # otherwise refuses to build shared libraries that link -lpthread).
     XC_HOST = tc.xcHost;
     WINE = tc.wineBin;
+    LDFLAGS = "-L${tc.winpthreads}/lib";
   };
 
   shellHook = ''

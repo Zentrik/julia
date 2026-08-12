@@ -152,6 +152,12 @@ pkgs.stdenv.mkDerivation {
     WINE = ${tc.wineBin}
     JULIA_CPU_TARGET = ${cpuTarget}
     ${bbMakeUser}
+    # Visible -L for winpthreads: libtool decides whether -lpthread can be
+    # satisfied by a shared library only from -L paths it can see, and the
+    # equivalent flag baked into the cc wrapper is invisible to it (without
+    # this, libtool-based deps like mpfr silently fall back to static-only
+    # builds and the build later fails looking for their DLLs).
+    LDFLAGS += -L${tc.winpthreads}/lib
     EOF
 
     # Several build steps run freshly cross-compiled executables (flisp.exe,

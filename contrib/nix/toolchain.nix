@@ -181,6 +181,13 @@ rec {
   # invoke these as $(CROSS_COMPILE)ar, $(CROSS_COMPILE)windres, etc.)
   crossBintools = pkgsWin.buildPackages.bintools;
 
+  # The winpthreads package, exposed so consumers can put its lib dir into
+  # LDFLAGS: libtool only honors -L paths it can see on the command line
+  # when deciding whether a shared library's -lpthread dependency is
+  # satisfiable, and the flags baked into the cc wrapper are invisible to
+  # it (observed: mpfr silently falling back to a static-only build).
+  winpthreads = pkgsWin.buildPackages.threadsCross.package;
+
   # Runs the freshly built julia.exe (system image generation) and
   # winepath.exe during the build; see `spawn` in Make.inc.
   wine = if arch == "x86_64" then pkgs.wine64 else pkgs.wine;
