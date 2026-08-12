@@ -105,15 +105,18 @@ distclean-csl: clean-csl
 else
 ifeq ($(OS),WINNT)
 # The CSL tarball ships import/static libraries from the mingw-w64 runtime it
-# was built against.  Newer cross toolchains lay their runtime out
-# differently (mingw-w64 12 moved e.g. truncf/round/strtoll/strtoull from
-# libmingwex.a into libmsvcrt.a), and since $(build_libdir) is searched
-# before the toolchain's own paths, linking against CSL's stale libmsvcrt.a
-# fails with undefined references to those symbols.  Drop it and use the
-# toolchain's copy; the symbols resolve against the OS msvcrt.dll at run
-# time either way.  (libgcc.a/libssp.dll.a are left alone: they must stay
-# matched to the runtime DLLs that CSL itself ships.)
-CSL_POST_INSTALL := rm -f $(build_libdir)/libmsvcrt.a
+# was built against.  Newer toolchains lay their runtime out differently
+# (mingw-w64 12 moved e.g. truncf/round/strtoll/strtoull from libmingwex.a
+# into libmsvcrt.a), and since $(build_libdir) is searched before the
+# toolchain's own paths, linking against CSL's stale libmsvcrt.a fails with
+# undefined references to those symbols.  We can't simply delete it: package
+# image linking (Base.Linking, via the bundled lld) links pkgimages with
+# `-L$(build_libdir) ... -lmsvcrt` and needs a copy there, also on end-user
+# machines with no toolchain.  So replace CSL's copy with this toolchain's,
+# keeping both link paths consistent; the symbols resolve against the OS
+# msvcrt.dll at run time either way.  (libgcc.a/libssp.dll.a are left
+# alone: they must stay matched to the runtime DLLs that CSL itself ships.)
+CSL_POST_INSTALL := cp -f $(shell $(CC) -print-file-name=libmsvcrt.a) $(build_libdir)/libmsvcrt.a
 endif
 $(eval $(call bb-install,csl,CSL,true))
 endif
