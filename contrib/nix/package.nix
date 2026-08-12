@@ -158,6 +158,17 @@ pkgs.stdenv.mkDerivation {
     # this, libtool-based deps like mpfr silently fall back to static-only
     # builds and the build later fails looking for their DLLs).
     LDFLAGS += -L${tc.winpthreads}/lib
+    ${lib.optionalString (!useBinaryBuilder) ''
+      # deps/csl.mk locates the compiler runtime DLLs to bundle
+      # (libstdc++-6.dll, libwinpthread-1.dll, ...) by searching
+      # $(FC) -print-search-dirs, but in the split Nix store layout those
+      # DLLs are spread over the C/C++ compiler's lib output, the Fortran
+      # compiler's lib output, and the winpthreads package -- gfortran's
+      # search dirs alone miss libstdc++ and libwinpthread, and Windows
+      # executables (e.g. the freshly built llvm-config.exe) then fail to
+      # load under wine.  Provide the search path explicitly.
+      override STD_LIB_PATH := ${tc.crossFortran.cc.lib}/${tc.xcHost}/lib:${tc.crossCC.cc.lib}/${tc.xcHost}/lib:${tc.winpthreads}/bin:${tc.winpthreads}/lib
+    ''}
     EOF
 
     # Several build steps run freshly cross-compiled executables (flisp.exe,
