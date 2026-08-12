@@ -77,11 +77,20 @@ let
     (
       let
         dropLeakyDeps = cc: cc.overrideAttrs (_: { depsTargetTarget = [ ]; });
+        # -isystem, not -idirafter: mingw-w64's headers ship *dummy*
+        # pthread_signal.h/pthread_time.h/pthread_unistd.h ("gets
+        # overridden, if winpthread library gets installed") that expect the
+        # winpthreads headers to be installed over them in the same
+        # directory.  In nixpkgs' split layout that never happens, so
+        # winpthreads' include dir must come earlier in the search order
+        # than the mingw headers or the dummies shadow the real
+        # declarations (<time.h> includes <pthread_time.h> for
+        # clock_gettime & co).
         bakeWinpthreads = wrapper:
           wrapper.override (old: {
             extraPackages = [ ];
             extraBuildCommands = (old.extraBuildCommands or "") + ''
-              echo "-idirafter ${final.threadsCross.package}/include" >> $out/nix-support/cc-cflags
+              echo "-isystem ${final.threadsCross.package}/include" >> $out/nix-support/cc-cflags
               echo "-L${final.threadsCross.package}/lib" >> $out/nix-support/cc-ldflags
             '';
           });
@@ -101,13 +110,28 @@ let
           # because the by-name-level .override cannot reach the cc-wrapper
           # arguments.
           gfortran13 = bakeWinpthreads (
-            final.wrapCC (final.gcc13.cc.override {
-              name = "gfortran";
-              langFortran = true;
-              langCC = false;
-              langC = false;
-              profiledCompiler = false;
-            })
+            final.wrapCC (
+              (final.gcc13.cc.override {
+                name = "gfortran";
+                langFortran = true;
+                langCC = false;
+                langC = false;
+                profiledCompiler = false;
+              }).overrideAttrs
+                (old: {
+                  # libgfortran (unlike libgcc/libstdc++) reaches the dummy
+                  # <pthread_time.h> through <time.h>; promote winpthreads'
+                  # include dir for the in-tree target-library builds, same
+                  # reasoning as bakeWinpthreads above.
+                  env = old.env // {
+                    EXTRA_FLAGS_FOR_TARGET =
+                      builtins.replaceStrings
+                        [ "-idirafter ${final.threadsCross.package}/include" ]
+                        [ "-isystem ${final.threadsCross.package}/include" ]
+                        old.env.EXTRA_FLAGS_FOR_TARGET;
+                  };
+                })
+            )
           );
         }
     );
