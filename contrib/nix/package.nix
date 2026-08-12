@@ -126,11 +126,15 @@ pkgs.stdenv.mkDerivation {
     JULIA_CPU_TARGET = ${cpuTarget}
     EOF
 
-    # The system image build runs the freshly cross-compiled julia.exe under
-    # wine, which wants a writable prefix.
+    # Several build steps run freshly cross-compiled executables (flisp.exe,
+    # julia.exe for the system image) under wine, which wants a writable
+    # prefix and -- since wine 9 -- an XDG_RUNTIME_DIR for the wineserver
+    # socket; neither exists in the isolated build environment.
     export HOME=$TMPDIR
     export WINEPREFIX=$TMPDIR/wine
     export WINEDEBUG=-all
+    export XDG_RUNTIME_DIR=$TMPDIR/xdg-runtime
+    mkdir -p -m 700 $XDG_RUNTIME_DIR
 
     runHook postConfigure
   '';
