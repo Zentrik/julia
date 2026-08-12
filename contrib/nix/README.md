@@ -1,10 +1,19 @@
 # Cross-compiling Julia to Windows with Nix
 
-This directory provides a [Nix](https://nixos.org) development shell for
-cross-compiling Julia from Linux to Windows, containing a complete
-mingw-w64 GCC toolchain, wine, and all other required build tools.
+This directory lets you build Julia for Windows from Linux using
+[Nix](https://nixos.org) — either fully inside Nix as a package build, or
+interactively in a dev shell. It provides a complete mingw-w64 GCC
+toolchain with the correct thread model, wine, and all other required
+tools.
 
-## The pthreads problem, and how this shell solves it
+| File | Purpose |
+|---|---|
+| `toolchain.nix` | The cross toolchain (posix-threads overlay) and tool set |
+| `package.nix` | Full Julia Windows build as a Nix derivation (`nix-build`) |
+| `windows.nix` | Interactive dev shell (manual `make`) |
+| `flake.nix` / `shell.nix` | Flake and classic entry points for the dev shell |
+
+## The pthreads problem, and how this solves it
 
 Julia's Windows build requires a mingw-w64 toolchain built with the
 **posix thread model** (winpthreads): `src/Makefile` links with
@@ -20,16 +29,50 @@ Since NixOS 24.05, nixpkgs builds its mingw-w64 GCC
 toolchain has no `pthread.h` and no `libpthread`, so the Julia build fails
 at compile/link time.
 
-`windows.nix` fixes this with an overlay that overrides nixpkgs'
+`toolchain.nix` fixes this with an overlay that overrides nixpkgs'
 `threadsCross` attribute, rebuilding the cross GCC with
 `--enable-threads=posix` against winpthreads
 (`windows.mingw_w64_pthreads`) — the exact equivalent of Debian's
 `x86_64-w64-mingw32-gcc-posix`.
 
-## Usage
+## Building Julia as a Nix package
 
-With flakes enabled (the `path:` prefix avoids copying your whole Julia
-checkout into the Nix store):
+```sh
+nix-build contrib/nix/package.nix                   # 64-bit Windows
+nix-build contrib/nix/package.nix --argstr arch i686
+```
+
+`./result` is a Windows Julia installation tree (`bin/julia.exe`, `lib/`,
+`share/`); zip it up and copy it to a Windows machine.
+
+Julia's build system normally downloads dependencies *during* the build
+(BinaryBuilder tarballs for LLVM, OpenBLAS, …, plus external stdlibs like
+Pkg), which Nix's network-isolated builds don't allow. `package.nix`
+therefore pre-fetches everything in a **fixed-output derivation** (the
+same pattern as Go's `vendorHash`), pinned by the `depsHashes` attribute
+in `package.nix`. Whenever dependency versions change in the source tree
+(`deps/*.version`, `deps/checksums/`, stdlib versions), that hash goes
+stale: rebuild the cache with `depsHash = null` (or `lib.fakeHash`) and
+copy the `got:` hash from the mismatch error back into `depsHashes`.
+
+Notes:
+
+- The package is built with plain `nix-build` rather than as a flake
+  output: this flake lives in a subdirectory, and pure flake evaluation
+  cannot reach the Julia sources at `../..`. (The dev shells below are
+  flake outputs, since they don't need the sources.)
+- The source tree is taken via `builtins.fetchGit`, i.e. tracked files
+  only — a dirty working tree works, but untracked files are invisible to
+  the build.
+- The system image is compiled by running the freshly built `julia.exe`
+  under wine, inside the Nix build. `JULIA_CPU_TARGET` defaults to
+  `generic` here (override with `--argstr cpuTarget ...`) so the sysimage
+  isn't tuned to the build machine.
+
+## Dev shell (manual builds)
+
+With flakes (the `path:` prefix avoids copying your whole Julia checkout
+into the Nix store):
 
 ```sh
 nix develop path:./contrib/nix          # 64-bit Windows (also `#win64`)
@@ -62,30 +105,31 @@ checkout.
 
 ## Notes
 
-- **First entry builds the toolchain from source.** The posix-threads
+- **First build compiles the toolchain from source.** The posix-threads
   toolchain differs from what the NixOS binary cache holds, so the first
-  `nix develop`/`nix-shell` compiles cross GCC and winpthreads locally
-  (roughly 20–60 minutes). It is cached in the Nix store afterwards.
-- **Verify the thread model** inside the shell with
+  build compiles cross GCC and winpthreads locally (roughly 1–2 hours).
+  It is cached in the Nix store afterwards.
+- **Verify the thread model** with
   `x86_64-w64-mingw32-gcc -v 2>&1 | grep Thread` — it must say
   `Thread model: posix`.
-- **GCC version.** The shell uses GCC 13 (`pkgsWin.buildPackages.gcc13` in
-  `windows.nix`) rather than the nixpkgs default, both because this source
-  tree predates GCC 14 and because the `libstdc++-6.dll` shipped by the
-  BinaryBuilder CompilerSupportLibraries (used at run time) is of the
+- **GCC version.** The toolchain uses GCC 13 (`crossCC` in
+  `toolchain.nix`) rather than the nixpkgs default, both because this
+  source tree predates GCC 14 and because the `libstdc++-6.dll` shipped by
+  the BinaryBuilder CompilerSupportLibraries (used at run time) is of the
   GCC 13 era. If you see `GLIBCXX_...' not found` errors from `julia.exe`
   under wine, the compiler is too new for those DLLs.
 - **Dependencies come from BinaryBuilder.** The default
   `USE_BINARYBUILDER=1` build downloads prebuilt Windows binaries for LLVM,
   OpenBLAS, etc., so no cross gfortran is needed. Building all deps from
   source (`USE_BINARYBUILDER=0`) would additionally require a cross
-  gfortran, which this shell does not provide.
-- **Wine noise.** Set `WINEDEBUG=-all` to silence wine's warnings during
-  the sysimage build. Wine creates its prefix in `~/.wine` on first use;
-  set `WINEPREFIX` to keep it elsewhere.
+  gfortran, which this toolchain does not provide.
+- **Wine noise.** In the dev shell, set `WINEDEBUG=-all` to silence wine's
+  warnings during the sysimage build (package builds do this already).
+  Wine creates its prefix in `~/.wine` on first use; set `WINEPREFIX` to
+  keep it elsewhere.
 - **Updating nixpkgs.** Bump the branch in `flake.nix` and the tarball rev
-  in `shell.nix` together. The winpthreads package was renamed between
-  25.05 (`windows.mingw_w64_pthreads`) and later nixpkgs
-  (`windows.pthreads`); the overlay in `windows.nix` handles both, but on
-  25.05 `windows.pthreads` is an unrelated library (pthreads-win32), so
+  in `shell.nix`/`package.nix` together. The winpthreads package was
+  renamed between 25.05 (`windows.mingw_w64_pthreads`) and later nixpkgs
+  (`windows.pthreads`); the overlay in `toolchain.nix` handles both, but
+  on 25.05 `windows.pthreads` is an unrelated library (pthreads-win32), so
   keep the fallback order intact.
