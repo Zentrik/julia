@@ -206,6 +206,13 @@ for pkg in i686-w64-mingw32-g++ i686-w64-mingw32-gcc i686-w64-mingw32-gfortran x
 done
 ```
 
+**With Nix** (any Linux distribution): the default nixpkgs mingw-w64 toolchain
+is built with the mcf thread model and cannot build Julia, which requires the
+posix thread model (winpthreads) — the same reason the `-posix` compiler
+variants are needed on Ubuntu above. [`contrib/nix/`](https://github.com/JuliaLang/julia/blob/master/contrib/nix)
+provides a ready-made dev shell with a posix-threads cross toolchain, wine,
+and all other required tools; see the README there for usage.
+
 **On Mac**: Install XCode, XCode command line tools, X11 (now
 [XQuartz](https://www.xquartz.org/)), and [MacPorts](https://www.macports.org/install.php)
 or [Homebrew](https://brew.sh/).  Then run `port install wine wget mingw-w64`, or `brew
