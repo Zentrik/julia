@@ -58,6 +58,7 @@ ifneq (bsdtar,$(findstring bsdtar,$(TAR_TEST)))
 	$(TAR) -tzf $$< | xargs -n 1 dirname | sort -u | (cd $$(build_prefix) && xargs -t mkdir -p)
 endif
 	$(UNTAR) $$< -C $$(build_prefix)
+	$$(if $$($(2)_POST_INSTALL),$$($(2)_POST_INSTALL),true)
 	echo '$$(UNINSTALL_$(strip $1))' > $$@
 
 # Special "checksum-foo" target to speed up `contrib/refresh_checksums.sh`
