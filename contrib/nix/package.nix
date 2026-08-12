@@ -37,6 +37,13 @@
   # the *build* machine's CPU, which is wrong for a binary that runs
   # elsewhere.
   cpuTarget ? "generic",
+  # true: download prebuilt dependency binaries (LLVM, OpenBLAS, ...) from
+  # BinaryBuilder, matching the composition of the official Julia Windows
+  # binaries; the cross toolchain then only compiles Julia itself.
+  # false: build all dependencies from source (as nixpkgs does for its
+  # native Julia packages); needs the cross gfortran and takes several
+  # extra hours.
+  useBinaryBuilder ? true,
   depsHash ? null, # overrides the pinned depsHashes entry below when non-null
 }:
 
@@ -45,17 +52,23 @@ let
   inherit (tc) pkgs;
   inherit (pkgs) lib;
 
-  # Fixed-output hashes of `depsCache` per target arch; refresh as described
-  # above whenever dependency versions change.
+  bbFlag = "USE_BINARYBUILDER=${if useBinaryBuilder then "1" else "0"}";
+
+  # Fixed-output hashes of `depsCache` per target arch and dependency mode;
+  # refresh as described above whenever dependency versions change.
   depsHashes = {
-    x86_64 = "sha256-UuxX/T2pwDmc1k5J2EKEu/Y/J+1Iht1j8+pZr9GUeWI=";
+    x86_64-bb = "sha256-UuxX/T2pwDmc1k5J2EKEu/Y/J+1Iht1j8+pZr9GUeWI=";
     # Not computed yet: build with `--arg depsHash null` and copy the hash
     # from the mismatch error here (see header comment).
-    i686 = lib.fakeHash;
+    x86_64-src = lib.fakeHash;
+    i686-bb = lib.fakeHash;
+    i686-src = lib.fakeHash;
   };
 
+  depsMode = "${arch}-${if useBinaryBuilder then "bb" else "src"}";
+
   effectiveDepsHash =
-    if depsHash != null then depsHash else depsHashes.${arch} or lib.fakeHash;
+    if depsHash != null then depsHash else depsHashes.${depsMode} or lib.fakeHash;
 
   version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
 
@@ -64,13 +77,13 @@ let
   # Makefiles themselves, which is what makes this derivation reproducible
   # enough to be fixed-output.
   depsCache = pkgs.stdenv.mkDerivation {
-    name = "julia-${version}-win-${arch}-depscache";
+    name = "julia-${version}-win-${depsMode}-depscache";
     inherit src;
 
     nativeBuildInputs = [
       tc.crossCC
       tc.crossBintools
-    ] ++ tc.nativeTools;
+    ] ++ lib.optional (!useBinaryBuilder) tc.crossFortran ++ tc.nativeTools;
 
     dontConfigure = true;
     dontFixup = true;
@@ -81,8 +94,8 @@ let
       # every dependency there is, including ones that don't exist for this
       # target (e.g. there is no LibUnwind BinaryBuilder artifact for
       # Windows).  `get` fetches exactly the configured DEP_LIBS.
-      make -C deps get -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1
-      make -C stdlib getall -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1 DEPS_GIT=0
+      make -C deps get -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1 ${bbFlag}
+      make -C stdlib getall -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1 DEPS_GIT=0 ${bbFlag}
       runHook postBuild
     '';
 
@@ -105,14 +118,14 @@ let
 in
 
 pkgs.stdenv.mkDerivation {
-  pname = "julia-win-${arch}";
+  pname = "julia-win-${arch}${lib.optionalString (!useBinaryBuilder) "-from-source"}";
   inherit version src;
 
   nativeBuildInputs = [
     tc.crossCC
     tc.crossBintools
     tc.wine
-  ] ++ tc.nativeTools;
+  ] ++ lib.optional (!useBinaryBuilder) tc.crossFortran ++ tc.nativeTools;
 
   configurePhase = ''
     runHook preConfigure
@@ -128,6 +141,7 @@ pkgs.stdenv.mkDerivation {
     NO_GIT = 1
     WINE = ${tc.wineBin}
     JULIA_CPU_TARGET = ${cpuTarget}
+    ${bbFlag}
     EOF
 
     # Several build steps run freshly cross-compiled executables (flisp.exe,

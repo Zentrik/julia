@@ -74,20 +74,43 @@ let
   #     then apply exactly when *this* cross compiler is invoked, and never
   #     contaminate other compilers in the same environment.
   //
-    prev.lib.optionalAttrs
-      (prev.stdenv.targetPlatform.isMinGW && !(prev.stdenv.targetPlatform.useLLVM or false))
-      {
-        gcc13 = prev.gcc13.override (old: {
-          cc = old.cc.overrideAttrs (_: {
-            depsTargetTarget = [ ];
+    (
+      let
+        dropLeakyDeps = cc: cc.overrideAttrs (_: { depsTargetTarget = [ ]; });
+        bakeWinpthreads = wrapper:
+          wrapper.override (old: {
+            extraPackages = [ ];
+            extraBuildCommands = (old.extraBuildCommands or "") + ''
+              echo "-idirafter ${final.threadsCross.package}/include" >> $out/nix-support/cc-cflags
+              echo "-L${final.threadsCross.package}/lib" >> $out/nix-support/cc-ldflags
+            '';
           });
-          extraPackages = [ ];
-          extraBuildCommands = (old.extraBuildCommands or "") + ''
-            echo "-idirafter ${final.threadsCross.package}/include" >> $out/nix-support/cc-cflags
-            echo "-L${final.threadsCross.package}/lib" >> $out/nix-support/cc-ldflags
-          '';
-        });
-      };
+      in
+      prev.lib.optionalAttrs
+        (prev.stdenv.targetPlatform.isMinGW && !(prev.stdenv.targetPlatform.useLLVM or false))
+        {
+          gcc13 = bakeWinpthreads (
+            prev.gcc13.override (old: {
+              cc = dropLeakyDeps old.cc;
+            })
+          );
+
+          # Same treatment for the Fortran compiler (used for the
+          # USE_BINARYBUILDER=0 from-source build of OpenBLAS & co).
+          # Defined from scratch (mirroring pkgs/by-name/gf/gfortran13)
+          # because the by-name-level .override cannot reach the cc-wrapper
+          # arguments.
+          gfortran13 = bakeWinpthreads (
+            final.wrapCC (final.gcc13.cc.override {
+              name = "gfortran";
+              langFortran = true;
+              langCC = false;
+              langC = false;
+              profiledCompiler = false;
+            })
+          );
+        }
+    );
 
   crossSystems = {
     # libc = "msvcrt" (not "ucrt"): Julia's official Windows binaries and all
@@ -124,6 +147,11 @@ rec {
   # compiled by a newer g++ could require GLIBCXX symbol versions that DLL
   # does not have.
   crossCC = pkgsWin.buildPackages.gcc13;
+
+  # Cross gfortran (same GCC version), needed only when building the
+  # dependencies from source (USE_BINARYBUILDER=0): OpenBLAS and
+  # SuiteSparse contain Fortran.
+  crossFortran = pkgsWin.buildPackages.gfortran13;
 
   # Prefixed ar/as/ld/ranlib/dlltool/windres/... (Make.inc and cli/Makefile
   # invoke these as $(CROSS_COMPILE)ar, $(CROSS_COMPILE)windres, etc.)
