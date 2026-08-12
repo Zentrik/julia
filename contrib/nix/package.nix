@@ -156,7 +156,10 @@ pkgs.stdenv.mkDerivation {
 
   installPhase = ''
     runHook preInstall
-    make install prefix=$PWD/julia-dist
+    # JULIA_INSTALL_DOCS=0: building the HTML docs needs network access (it
+    # fetches Documenter & friends through Pkg at build time), which isn't
+    # available inside the sandbox; read the manual at docs.julialang.org.
+    make install prefix=$PWD/julia-dist JULIA_INSTALL_DOCS=0
     mkdir -p $out
     cp -a julia-dist/. $out/
     # same pruning of LLVM tools as `make binary-dist` does for Windows

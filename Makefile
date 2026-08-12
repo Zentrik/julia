@@ -272,7 +272,10 @@ define stringreplace
 endef
 
 
-install: $(build_depsbindir)/stringreplace docs
+ifneq ($(JULIA_INSTALL_DOCS),0)
+install: docs
+endif
+install: $(build_depsbindir)/stringreplace
 	@$(MAKE) $(QUIET_MAKE) $(JULIA_BUILD_MODE)
 	@for subdir in $(bindir) $(datarootdir)/julia/stdlib/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/julia $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
 		mkdir -p $(DESTDIR)$$subdir; \
@@ -376,7 +379,9 @@ endif
 	cp -R -L $(JULIAHOME)/test/* $(DESTDIR)$(datarootdir)/julia/test
 	cp -R -L $(build_datarootdir)/julia/* $(DESTDIR)$(datarootdir)/julia
 	# Copy documentation
+ifneq ($(JULIA_INSTALL_DOCS),0)
 	cp -R -L $(BUILDROOT)/doc/_build/html $(DESTDIR)$(docdir)/
+endif
 	# Remove various files which should not be installed
 	-rm -f $(DESTDIR)$(datarootdir)/julia/base/version_git.sh
 	-rm -f $(DESTDIR)$(datarootdir)/julia/test/Makefile
