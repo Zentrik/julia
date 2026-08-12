@@ -61,7 +61,7 @@ let
     # Not computed yet: build with `--arg depsHash null` and copy the hash
     # from the mismatch error here (see header comment).
     x86_64-src = lib.fakeHash;
-    i686-bb = lib.fakeHash;
+    i686-bb = "sha256-CiBJR7d3dKTk9SBUjOFQ/kzkqgF07QfXdSsFu2UyzUI=";
     i686-src = lib.fakeHash;
   };
 
