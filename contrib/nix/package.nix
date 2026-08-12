@@ -60,7 +60,7 @@ let
     x86_64-bb = "sha256-UuxX/T2pwDmc1k5J2EKEu/Y/J+1Iht1j8+pZr9GUeWI=";
     # Not computed yet: build with `--arg depsHash null` and copy the hash
     # from the mismatch error here (see header comment).
-    x86_64-src = lib.fakeHash;
+    x86_64-src = "sha256-HvNcbYnwhlL1yiCnEb/KV2B6Nf/Avybqdxg8CNhX9w0=";
     i686-bb = "sha256-CiBJR7d3dKTk9SBUjOFQ/kzkqgF07QfXdSsFu2UyzUI=";
     i686-src = lib.fakeHash;
   };
