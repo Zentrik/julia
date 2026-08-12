@@ -27,6 +27,12 @@ endif
 
 define BLASTRAMPOLINE_INSTALL
 	$(MAKE) -C $(BLASTRAMPOLINE_BUILD_ROOT) install $(BLASTRAMPOLINE_BUILD_OPTS) DESTDIR="$2"
+ifeq ($$(OS), WINNT)
+	# libblastrampoline only builds/installs the soversioned DLL on
+	# Windows, but SuiteSparse links against the unversioned name; provide
+	# it as a hard link
+	cd $2/$$(build_bindir) && cp -f --dereference --link libblastrampoline-*.dll libblastrampoline.dll
+endif
 endef
 $(eval $(call staged-install, \
 	blastrampoline,$(BLASTRAMPOLINE_SRC_DIR), \

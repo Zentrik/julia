@@ -395,6 +395,12 @@ else
 HOSTCC ?= gcc
 HOSTCXX ?= g++
 OPENBLAS_DYNAMIC_ARCH := 1
+ifeq ($(OPENBLAS_TARGET_ARCH),)
+# OpenBLAS cannot probe a CPU when cross-compiling (getarch runs with
+# CROSS=1); DYNAMIC_ARCH builds still need a base TARGET, so default to the
+# generic one.  (The ARM sections further down still override this.)
+OPENBLAS_TARGET_ARCH := GENERIC
+endif
 override CROSS_COMPILE:=$(XC_HOST)-
 ifneq (,$(findstring mingw,$(XC_HOST)))
 override OS := WINNT
