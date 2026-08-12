@@ -75,7 +75,11 @@ let
 
     buildPhase = ''
       runHook preBuild
-      make -C deps getall -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1
+      # `get`, not `getall`: getall is meant for source dists and fetches
+      # every dependency there is, including ones that don't exist for this
+      # target (e.g. there is no LibUnwind BinaryBuilder artifact for
+      # Windows).  `get` fetches exactly the configured DEP_LIBS.
+      make -C deps get -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1
       make -C stdlib getall -j$NIX_BUILD_CORES XC_HOST=${tc.xcHost} NO_GIT=1 DEPS_GIT=0
       runHook postBuild
     '';
