@@ -52,7 +52,17 @@ let
   inherit (tc) pkgs;
   inherit (pkgs) lib;
 
-  bbFlag = "USE_BINARYBUILDER=${if useBinaryBuilder then "1" else "0"}";
+  # In from-source mode, p7zip is the one exception kept from
+  # BinaryBuilder: Julia bundles the standalone 7z.exe as a utility (it is
+  # never linked against Julia), and the p7zip codebase is a Unix-only port
+  # that cannot be cross-compiled for Windows (mingw predefines _WIN32,
+  # which sends it down 7-zip's Windows code paths without the Windows
+  # build scaffolding).
+  bbFlags = [
+    "USE_BINARYBUILDER=${if useBinaryBuilder then "1" else "0"}"
+  ] ++ lib.optional (!useBinaryBuilder) "USE_BINARYBUILDER_P7ZIP=1";
+  bbFlag = toString bbFlags; # make command-line form
+  bbMakeUser = lib.concatStringsSep "\n" bbFlags; # Make.user form (one per line)
 
   # Fixed-output hashes of `depsCache` per target arch and dependency mode;
   # refresh as described above whenever dependency versions change.
@@ -141,7 +151,7 @@ pkgs.stdenv.mkDerivation {
     NO_GIT = 1
     WINE = ${tc.wineBin}
     JULIA_CPU_TARGET = ${cpuTarget}
-    ${bbFlag}
+    ${bbMakeUser}
     EOF
 
     # Several build steps run freshly cross-compiled executables (flisp.exe,
