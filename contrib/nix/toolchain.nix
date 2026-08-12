@@ -50,7 +50,44 @@ let
           # `windows.pthreads`; keep the old name as a fallback anyway.
           package = final.windows.pthreads or final.windows.mingw_w64_pthreads;
         };
-  };
+  }
+  # Unlike mcfgthread, winpthreads ships a `pthread.h`.  Any mechanism that
+  # spreads its include dir through *setup-hook* env vars poisons the
+  # native compiler in the same environment: hooks add
+  # `-isystem .../winpthreads/include` to the host/build compiler flags,
+  # which shadows glibc's pthread.h (winpthreads' pthread.h includes the
+  # Windows-only <process.h> and everything burns down).  nixpkgs' posix
+  # path has rotted this way since the default moved to mcf, in two places:
+  #
+  #  1. gcc's own build: dependencies.nix puts threadsCross.package in
+  #     depsTargetTarget, whose hooks leak it into NIX_CFLAGS_COMPILE(_FOR_
+  #     BUILD) and break host-side components (observed: gcc 13's libcody).
+  #     The in-tree target-library builds (libgcc/libstdc++) don't need the
+  #     hooks -- they receive winpthreads via the explicit
+  #     EXTRA_{FLAGS,LDFLAGS}_FOR_TARGET -- so the dep entry can go.
+  #
+  #  2. The cc-wrapper: wrapCC puts threadsCross.package in the wrapper's
+  #     extraPackages (propagated deps), leaking the same way into any
+  #     downstream build environment that also compiles native code -- like
+  #     Julia's, which builds host tools with HOSTCC.  Instead, bake
+  #     -idirafter/-L flags for winpthreads directly into the wrapper: they
+  #     then apply exactly when *this* cross compiler is invoked, and never
+  #     contaminate other compilers in the same environment.
+  //
+    prev.lib.optionalAttrs
+      (prev.stdenv.targetPlatform.isMinGW && !(prev.stdenv.targetPlatform.useLLVM or false))
+      {
+        gcc13 = prev.gcc13.override (old: {
+          cc = old.cc.overrideAttrs (_: {
+            depsTargetTarget = [ ];
+          });
+          extraPackages = [ ];
+          extraBuildCommands = (old.extraBuildCommands or "") + ''
+            echo "-idirafter ${final.threadsCross.package}/include" >> $out/nix-support/cc-cflags
+            echo "-L${final.threadsCross.package}/lib" >> $out/nix-support/cc-ldflags
+          '';
+        });
+      };
 
   crossSystems = {
     # libc = "msvcrt" (not "ucrt"): Julia's official Windows binaries and all
