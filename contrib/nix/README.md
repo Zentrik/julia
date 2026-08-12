@@ -42,6 +42,11 @@ nix-build contrib/nix/package.nix                   # 64-bit Windows
 nix-build contrib/nix/package.nix --argstr arch i686
 ```
 
+The x86_64 build is validated end to end: the produced `result/bin/julia.exe`
+runs under wine with working multithreading
+(`wine64 result/bin/julia.exe -t 4 -e 'Threads.@spawn ...'`).  The i686
+variant is untested (and its `depsHashes` entry still needs computing).
+
 `./result` is a Windows Julia installation tree (`bin/julia.exe`, `lib/`,
 `share/`); zip it up and copy it to a Windows machine.
 
