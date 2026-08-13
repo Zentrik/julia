@@ -14,6 +14,12 @@
   nixpkgs, # path to a nixpkgs checkout (flake input outPath or fetchTarball)
   system ? builtins.currentSystem,
   arch ? "x86_64", # "x86_64" or "i686"
+  # GCC major version for the cross toolchain: "13" or "14".  Pick to match
+  # the Julia sources: 1.11-era trees predate GCC 14 and pair with the
+  # GCC 13-era BinaryBuilder CSL runtime; newer trees (1.12+) work with
+  # either.  (The -fstack-clash-protection ICE workaround in the consumers
+  # only matters for GCC 13.)
+  gccVersion ? "13",
 }:
 
 let
@@ -97,43 +103,51 @@ let
       in
       prev.lib.optionalAttrs
         (prev.stdenv.targetPlatform.isMinGW && !(prev.stdenv.targetPlatform.useLLVM or false))
-        {
-          gcc13 = bakeWinpthreads (
-            prev.gcc13.override (old: {
-              cc = dropLeakyDeps old.cc;
-            })
-          );
-
-          # Same treatment for the Fortran compiler (used for the
-          # USE_BINARYBUILDER=0 from-source build of OpenBLAS & co).
-          # Defined from scratch (mirroring pkgs/by-name/gf/gfortran13)
-          # because the by-name-level .override cannot reach the cc-wrapper
-          # arguments.
-          gfortran13 = bakeWinpthreads (
-            final.wrapCC (
-              (final.gcc13.cc.override {
-                name = "gfortran";
-                langFortran = true;
-                langCC = false;
-                langC = false;
-                profiledCompiler = false;
-              }).overrideAttrs
-                (old: {
-                  # libgfortran (unlike libgcc/libstdc++) reaches the dummy
-                  # <pthread_time.h> through <time.h>; promote winpthreads'
-                  # include dir for the in-tree target-library builds, same
-                  # reasoning as bakeWinpthreads above.
-                  env = old.env // {
-                    EXTRA_FLAGS_FOR_TARGET =
-                      builtins.replaceStrings
-                        [ "-idirafter ${final.threadsCross.package}/include" ]
-                        [ "-isystem ${final.threadsCross.package}/include" ]
-                        old.env.EXTRA_FLAGS_FOR_TARGET;
-                  };
+        (
+          let
+            patchGcc = ver: {
+              "gcc${ver}" = bakeWinpthreads (
+                prev."gcc${ver}".override (old: {
+                  cc = dropLeakyDeps old.cc;
                 })
-            )
-          );
-        }
+              );
+
+              # Same treatment for the Fortran compiler (used for the
+              # USE_BINARYBUILDER=0 from-source build of OpenBLAS & co).
+              # Defined from scratch (mirroring pkgs/by-name/gf/gfortran*)
+              # because the by-name-level .override cannot reach the
+              # cc-wrapper arguments.
+              "gfortran${ver}" = bakeWinpthreads (
+                final.wrapCC (
+                  (final."gcc${ver}".cc.override {
+                    name = "gfortran";
+                    langFortran = true;
+                    langCC = false;
+                    langC = false;
+                    profiledCompiler = false;
+                  }).overrideAttrs
+                    (old: {
+                      # libgfortran (unlike libgcc/libstdc++) reaches the
+                      # dummy <pthread_time.h> through <time.h>; promote
+                      # winpthreads' include dir for the in-tree
+                      # target-library builds, same reasoning as
+                      # bakeWinpthreads above.
+                      env = old.env // {
+                        EXTRA_FLAGS_FOR_TARGET =
+                          builtins.replaceStrings
+                            [ "-idirafter ${final.threadsCross.package}/include" ]
+                            [ "-isystem ${final.threadsCross.package}/include" ]
+                            old.env.EXTRA_FLAGS_FOR_TARGET;
+                      };
+                    })
+                )
+              );
+            };
+          in
+          # Patch both supported major versions; only the one selected via
+          # `gccVersion` is ever evaluated/built.
+          patchGcc "13" // patchGcc "14"
+        )
     );
 
   crossSystems = {
@@ -170,12 +184,12 @@ rec {
   # BinaryBuilder CompilerSupportLibraries is of the GCC 13 era, so code
   # compiled by a newer g++ could require GLIBCXX symbol versions that DLL
   # does not have.
-  crossCC = pkgsWin.buildPackages.gcc13;
+  crossCC = pkgsWin.buildPackages."gcc${gccVersion}";
 
   # Cross gfortran (same GCC version), needed only when building the
   # dependencies from source (USE_BINARYBUILDER=0): OpenBLAS and
   # SuiteSparse contain Fortran.
-  crossFortran = pkgsWin.buildPackages.gfortran13;
+  crossFortran = pkgsWin.buildPackages."gfortran${gccVersion}";
 
   # Prefixed ar/as/ld/ranlib/dlltool/windres/... (Make.inc and cli/Makefile
   # invoke these as $(CROSS_COMPILE)ar, $(CROSS_COMPILE)windres, etc.)
