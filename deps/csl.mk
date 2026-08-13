@@ -88,6 +88,25 @@ else
 $(eval $(call copy_csl,$(call versioned_libname,libpthread,0)))
 endif
 
+ifeq ($(OS),WINNT)
+# Base.Linking links package images through the bundled lld with
+# `-L$(build_libdir) ... -lssp -lgcc_s -lgcc -lmsvcrt`.  The BinaryBuilder
+# CSL tarball ships these import/static libraries; when bundling CSL from
+# the compiler instead, provide them from the toolchain the same way (they
+# are installed with Julia, so package image creation also works on
+# end-user machines with no toolchain).
+define copy_csl_implib
+install-csl: | $$(build_libdir) $$(build_libdir)/$(1)
+$$(build_libdir)/$(1): | $$(build_libdir)
+	-@SRC_LIB="$$$$($$(CC) -print-file-name='$(1)')"; \
+	[ -e "$$$${SRC_LIB}" ] && cp "$$$${SRC_LIB}" '$$(build_libdir)'
+endef
+$(eval $(call copy_csl_implib,libmsvcrt.a))
+$(eval $(call copy_csl_implib,libssp.dll.a))
+$(eval $(call copy_csl_implib,libgcc_s.a))
+$(eval $(call copy_csl_implib,libgcc.a))
+endif
+
 get-csl:
 clean-csl:
 	-rm -f $(build_shlibdir)/libgfortran*$(SHLIB_EXT)*
