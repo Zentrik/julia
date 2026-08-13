@@ -14,6 +14,11 @@
 # Set to zero to turn off extra precompile (e.g. for the REPL)
 JULIA_PRECOMPILE ?= 1
 
+# Set to zero to skip building and installing the HTML documentation with
+# `make install` (building it needs network access to fetch the doc build
+# dependencies, e.g. Documenter)
+JULIA_INSTALL_DOCS ?= 1
+
 # Set FORCE_ASSERTIONS to 1 to enable assertions in the C and C++ portions
 # of the Julia code base. You may also want to set LLVM_ASSERTIONS to 1,
 # which will enable assertions in LLVM.
@@ -448,6 +453,12 @@ else
 HOSTCC ?= gcc
 HOSTCXX ?= g++
 OPENBLAS_DYNAMIC_ARCH := 1
+ifeq ($(OPENBLAS_TARGET_ARCH),)
+# OpenBLAS cannot probe a CPU when cross-compiling (getarch runs with
+# CROSS=1); DYNAMIC_ARCH builds still need a base TARGET, so default to the
+# generic one.  (The ARM sections further down still override this.)
+OPENBLAS_TARGET_ARCH := GENERIC
+endif
 override CROSS_COMPILE:=$(XC_HOST)-
 ifneq (,$(findstring mingw,$(XC_HOST)))
 override OS := WINNT

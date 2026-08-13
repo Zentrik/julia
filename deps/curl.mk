@@ -46,7 +46,7 @@ CURL_CONFIGURE_FLAGS := $(CONFIGURE_COMMON)				\
         --disable-ares --disable-manual					\
         --disable-ldap --disable-ldaps --without-zsh-functions-dir	\
         --disable-static --without-libgsasl				\
-        --without-brotli
+        --without-brotli --without-zstd
 # A few things we actually enable
 CURL_CONFIGURE_FLAGS +=											\
         --with-libssh2=${build_prefix} --with-zlib=${build_prefix} --with-nghttp2=${build_prefix}	\
