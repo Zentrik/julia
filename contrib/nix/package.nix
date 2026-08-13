@@ -181,9 +181,7 @@ pkgs.stdenv.mkDerivation {
     # err channels stay on: with -all, wine also suppresses err:module /
     # err:seh, making crashed or unloadable Windows processes completely
     # silent (observed with the flaky 1.12 sysimage bootstrap).
-    # TEMPORARY diagnostics: trace SEH exceptions and dll loads to find the
-    # silent in-sandbox sysbase crash
-    export WINEDEBUG=fixme-all,warn-all,+seh,+loaddll
+    export WINEDEBUG=fixme-all,warn-all
     export XDG_RUNTIME_DIR=$TMPDIR/xdg-runtime
     mkdir -p -m 700 $XDG_RUNTIME_DIR
 
