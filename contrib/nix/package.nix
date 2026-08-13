@@ -30,6 +30,7 @@
   nixpkgs ? fetchTarball "https://github.com/NixOS/nixpkgs/archive/3e3f3c7f9977dc123c23ee21e8085ed63daf8c37.tar.gz",
   system ? builtins.currentSystem,
   arch ? "x86_64", # "x86_64" or "i686"
+  gccVersion ? "13", # cross toolchain GCC major: "13" or "14" (see toolchain.nix)
   # The Julia source tree: tracked (+ locally modified) files only, so stray
   # build artifacts in the work tree don't leak into the build.
   src ? builtins.fetchGit ../../.,
@@ -48,7 +49,7 @@
 }:
 
 let
-  tc = import ./toolchain.nix { inherit nixpkgs system arch; };
+  tc = import ./toolchain.nix { inherit nixpkgs system arch gccVersion; };
   inherit (tc) pkgs;
   inherit (pkgs) lib;
 

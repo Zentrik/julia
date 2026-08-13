@@ -7,10 +7,11 @@
   nixpkgs, # path to a nixpkgs checkout (flake input outPath or fetchTarball)
   system ? builtins.currentSystem,
   arch ? "x86_64", # "x86_64" or "i686"
+  gccVersion ? "13", # cross toolchain GCC major: "13" or "14" (see toolchain.nix)
 }:
 
 let
-  tc = import ./toolchain.nix { inherit nixpkgs system arch; };
+  tc = import ./toolchain.nix { inherit nixpkgs system arch gccVersion; };
   inherit (tc) pkgs;
 in
 
