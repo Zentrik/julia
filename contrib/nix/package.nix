@@ -178,7 +178,10 @@ pkgs.stdenv.mkDerivation {
     # socket; neither exists in the isolated build environment.
     export HOME=$TMPDIR
     export WINEPREFIX=$TMPDIR/wine
-    export WINEDEBUG=-all
+    # err channels stay on: with -all, wine also suppresses err:module /
+    # err:seh, making crashed or unloadable Windows processes completely
+    # silent (observed with the flaky 1.12 sysimage bootstrap).
+    export WINEDEBUG=fixme-all,warn-all
     export XDG_RUNTIME_DIR=$TMPDIR/xdg-runtime
     mkdir -p -m 700 $XDG_RUNTIME_DIR
 
