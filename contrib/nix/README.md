@@ -54,15 +54,20 @@ from this branch are already fixed upstream; 1.12 additionally needs a
 backport of master's `pkgimage.mk` `DEPOTDIR` split (the wine-converted
 `Z:\...` depot path is a make syntax error in target position).
 
-Two 1.12+/master caveats:
-
-- The wine-hosted system-image bootstrap of 1.12-lineage trees fails when
-  its stdout is a pipe (as in a Nix builder log); the package build routes
-  the wine-heavy stages through log files to cope.
-- Even so, the same bootstrap is killed inside the Nix *sandbox* for
-  reasons not yet isolated (works fine unsandboxed and on the host; PID
-  namespaces alone are not the cause).  Until root-caused, build 1.12+
-  with `--option sandbox false`.  1.11 builds fully sandboxed.
+One 1.12+/master caveat, root-caused after considerable head-scratching:
+julia 1.12's wine-hosted system-image bootstrap exits silently (status 1,
+no output) when any of its stdio descriptors is a pipe.  libuv's
+`uv_pipe_open` fails with `EBADF` on wine's wrapping of inherited unix
+pipes, and the resulting error fires during `init_stdio` -- before julia
+can print anything (1.11's older libuv predates the failing check).  The
+subtle part: GNU make under `-jN` hands every concurrently running recipe
+except one a pipe as stdin ("bad stdin", `job.c`), so the sysimage stages
+died or survived by job-scheduling lottery -- which happened to look like
+a Nix-sandbox problem (it isn't; seccomp, no_new_privs, namespaces and
+ASLR-disabling were all ruled out empirically).  Fixed by spawning wine
+with stdin redirected from `/dev/null` (`wineBin` in `toolchain.nix`) and
+routing the wine-heavy stages' stdout through log files in the 1.12+
+package builds.  With that, 1.12+ builds fully sandboxed like 1.11.
 
 ## Building Julia as a Nix package
 
