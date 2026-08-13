@@ -348,7 +348,10 @@ endef
 
 
 .PHONY: install
-install: $(build_depsbindir)/stringreplace $(BUILDROOT)/doc/_build/html/en/index.html
+ifneq ($(JULIA_INSTALL_DOCS),0)
+install: $(BUILDROOT)/doc/_build/html/en/index.html
+endif
+install: $(build_depsbindir)/stringreplace
 	@$(MAKE) $(QUIET_MAKE) $(JULIA_BUILD_MODE)
 	@for subdir in $(bindir) $(datarootdir)/julia/stdlib/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/julia $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
 		mkdir -p $(DESTDIR)$$subdir; \
@@ -491,7 +494,9 @@ endif
 	find $(DESTDIR)$(datarootdir)/julia/test -type f -name \*.jl -exec chmod 0444 '{}' \;
 
 	# Copy documentation
+ifneq ($(JULIA_INSTALL_DOCS),0)
 	cp -R -L $(BUILDROOT)/doc/_build/html $(DESTDIR)$(docdir)/
+endif
 	# Remove various files which should not be installed
 	-rm -f $(DESTDIR)$(datarootdir)/julia/base/version_git.sh
 	-rm -f $(DESTDIR)$(datarootdir)/julia/test/Makefile
