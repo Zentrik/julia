@@ -47,6 +47,34 @@ in sandboxed Nix builds: the produced `result/bin/julia.exe` runs under wine
 (64-bit and 32-bit respectively) with working multithreading
 (`wine64 result/bin/julia.exe -t 4 -e 'Threads.@spawn ...'`).
 
+### Building the dependencies from source
+
+```sh
+nix-build contrib/nix/package.nix --arg useBinaryBuilder false
+```
+
+builds every dependency from source (LLVM, OpenBLAS via the cross
+gfortran, SuiteSparse, GMP/MPFR, curl, ...) instead of downloading
+BinaryBuilder binaries — the same philosophy as nixpkgs' own from-source
+Julia packages, adapted for the Windows cross build.  This takes several
+extra hours (LLVM dominates).  Validated end to end for x86_64: the result
+runs under wine with working threads, BLAS (through libblastrampoline) and
+BigFloat.
+
+One deliberate exception: the bundled standalone `7z.exe` still comes from
+BinaryBuilder, because the p7zip codebase is a Unix-only port that cannot
+be cross-compiled for Windows.  It is a utility program, never linked
+against Julia.  The compiler-support runtime DLLs (libstdc++-6.dll,
+libwinpthread-1.dll, libgfortran-5.dll, ...) are bundled from the Nix
+cross toolchain itself, so they exactly match the compiler that built
+everything.
+
+The from-source mode is only wired up for cross builds from this
+directory; it leans on several build-system fixes on this branch
+(OpenBLAS cross TARGET, blastrampoline/SuiteSparse DLL naming, curl zstd
+detection, CSL bundling of link libraries and runtime DLLs), most of which
+had bit-rotted upstream since BinaryBuilder became the default.
+
 `./result` is a Windows Julia installation tree (`bin/julia.exe`, `lib/`,
 `share/`); zip it up and copy it to a Windows machine.
 
