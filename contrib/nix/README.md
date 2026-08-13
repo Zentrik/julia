@@ -35,6 +35,35 @@ at compile/link time.
 (`windows.mingw_w64_pthreads`) — the exact equivalent of Debian's
 `x86_64-w64-mingw32-gcc-posix`.
 
+## Julia version × GCC support matrix
+
+The toolchain GCC major is selectable (`--argstr gccVersion 13|14`).
+Validated combinations (x86_64, BinaryBuilder mode, build + wine smoke
+test with working threads):
+
+| Julia tree | GCC 13 | GCC 14 |
+|---|---|---|
+| 1.11 (this branch) | ✅ | ❌ sources predate GCC 14 (`-Wint-conversion` errors in `src/jl_uv.c`) |
+| 1.12 (release-1.12) | ✅ | ✅ |
+| master (1.14-DEV) | untested | ✅ |
+
+Porting notes for 1.12/master trees (patches carried on their branches):
+the OpenBLAS cross `TARGET=GENERIC` default and the `JULIA_INSTALL_DOCS`
+knob are still needed there; the blastrampoline and CSL/libmsvcrt fixes
+from this branch are already fixed upstream; 1.12 additionally needs a
+backport of master's `pkgimage.mk` `DEPOTDIR` split (the wine-converted
+`Z:\...` depot path is a make syntax error in target position).
+
+Two 1.12+/master caveats:
+
+- The wine-hosted system-image bootstrap of 1.12-lineage trees fails when
+  its stdout is a pipe (as in a Nix builder log); the package build routes
+  the wine-heavy stages through log files to cope.
+- Even so, the same bootstrap is killed inside the Nix *sandbox* for
+  reasons not yet isolated (works fine unsandboxed and on the host; PID
+  namespaces alone are not the cause).  Until root-caused, build 1.12+
+  with `--option sandbox false`.  1.11 builds fully sandboxed.
+
 ## Building Julia as a Nix package
 
 ```sh
