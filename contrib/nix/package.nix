@@ -197,13 +197,21 @@ pkgs.stdenv.mkDerivation {
     # The wine-hosted system image bootstrap is additionally flaky on its
     # own (rare spurious failures/hangs); make is incremental, so retry a
     # couple of times before giving up.
+    # Julia 1.12's wine-hosted bootstrap fails (silently) when its stdout
+    # is a pipe -- which the Nix builder's log always is -- but works when
+    # stdout is a regular file.  Route the wine-heavy stages through a log
+    # file and echo it afterwards.
     ok=0
     for attempt in 1 2 3; do
-      if make -j$NIX_BUILD_CORES julia-release; then ok=1; break; fi
-      echo "julia-release failed (attempt $attempt); retrying..."
+      if make -j$NIX_BUILD_CORES julia-release > make-julia-release.log 2>&1; then
+        ok=1; tail -n 30 make-julia-release.log; break
+      fi
+      echo "julia-release failed (attempt $attempt); log tail:"
+      tail -n 40 make-julia-release.log
     done
     [ "$ok" = 1 ]
-    make -j1
+    make -j1 > make-final.log 2>&1 || { tail -n 60 make-final.log; false; }
+    tail -n 15 make-final.log
     runHook postBuild
   '';
 
@@ -212,7 +220,9 @@ pkgs.stdenv.mkDerivation {
     # JULIA_INSTALL_DOCS=0: building the HTML docs needs network access (it
     # fetches Documenter & friends through Pkg at build time), which isn't
     # available inside the sandbox; read the manual at docs.julialang.org.
-    make install prefix=$PWD/julia-dist JULIA_INSTALL_DOCS=0
+    make install prefix=$PWD/julia-dist JULIA_INSTALL_DOCS=0 > make-install.log 2>&1 \
+      || { tail -n 60 make-install.log; false; }
+    tail -n 10 make-install.log
     mkdir -p $out
     cp -a julia-dist/. $out/
     # same pruning of LLVM tools as `make binary-dist` does for Windows
