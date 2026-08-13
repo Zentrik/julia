@@ -68,7 +68,7 @@ let
   # Fixed-output hashes of `depsCache` per target arch and dependency mode;
   # refresh as described above whenever dependency versions change.
   depsHashes = {
-    x86_64-bb = lib.fakeHash;
+    x86_64-bb = "sha256-kyMtaTBEcot8Tvj7J++2uQIAZqvWKl8agfJRWwB8f/4=";
     # Not computed yet: build with `--arg depsHash null` and copy the hash
     # from the mismatch error here (see header comment).
     x86_64-src = lib.fakeHash;
