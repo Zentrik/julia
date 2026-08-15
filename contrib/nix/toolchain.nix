@@ -205,25 +205,7 @@ rec {
   # Runs the freshly built julia.exe (system image generation) and
   # winepath.exe during the build; see `spawn` in Make.inc.
   wine = if arch == "x86_64" then pkgs.wine64 else pkgs.wine;
-
-  # The wrapper matters: julia 1.12+ running under wine exits silently
-  # (status 1, no output) during startup when its stdin is a pipe -- libuv's
-  # uv_pipe_open fails with EBADF on wine's wrapping of inherited unix
-  # pipes, and the resulting jl_errorf fires before julia's error printing
-  # is initialized.  GNU make under -jN hands every concurrently running
-  # recipe except one a "bad stdin" (the read end of a writerless pipe; see
-  # get_bad_stdin in make's job.c), so wine-spawned julia processes in a
-  # parallel build die at random, depending on the job-scheduling lottery.
-  # Some build steps DO feed wine real input through a redirected file
-  # (src/Makefile pipes julia_flisp.boot through flisp bin2hex.scm via
-  # `< $<`), so only pipe/socket stdin -- the pathological cases -- is
-  # replaced; files, ttys and character devices pass through untouched.
-  wineBin = "${pkgs.writeShellScript "wine-nostdin" ''
-    if [ -p /proc/self/fd/0 ] || [ -S /proc/self/fd/0 ]; then
-      exec ${wine}/bin/${if arch == "x86_64" then "wine64" else "wine"} "$@" < /dev/null
-    fi
-    exec ${wine}/bin/${if arch == "x86_64" then "wine64" else "wine"} "$@"
-  ''}";
+  wineBin = "${wine}/bin/${if arch == "x86_64" then "wine64" else "wine"}";
 
   # Tools that run on the build machine.  A native C/C++ compiler (HOSTCC)
   # is provided by stdenv/mkShell and is not listed here.

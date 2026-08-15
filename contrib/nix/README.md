@@ -54,20 +54,31 @@ from this branch are already fixed upstream; 1.12 additionally needs a
 backport of master's `pkgimage.mk` `DEPOTDIR` split (the wine-converted
 `Z:\...` depot path is a make syntax error in target position).
 
-One 1.12+/master caveat, root-caused after considerable head-scratching:
-julia 1.12's wine-hosted system-image bootstrap exits silently (status 1,
-no output) when any of its stdio descriptors is a pipe.  libuv's
-`uv_pipe_open` fails with `EBADF` on wine's wrapping of inherited unix
-pipes, and the resulting error fires during `init_stdio` -- before julia
-can print anything (1.11's older libuv predates the failing check).  The
-subtle part: GNU make under `-jN` hands every concurrently running recipe
-except one a pipe as stdin ("bad stdin", `job.c`), so the sysimage stages
-died or survived by job-scheduling lottery -- which happened to look like
-a Nix-sandbox problem (it isn't; seccomp, no_new_privs, namespaces and
-ASLR-disabling were all ruled out empirically).  Fixed by spawning wine
-with stdin redirected from `/dev/null` (`wineBin` in `toolchain.nix`) and
-routing the wine-heavy stages' stdout through log files in the 1.12+
-package builds.  With that, 1.12+ builds fully sandboxed like 1.11.
+The 1.12+/master trees additionally need two julia-side robustness fixes,
+carried on their branches and worth upstreaming:
+
+- `init_stdio_handle` (`src/init.c`): julia 1.12's newer libuv rejects
+  wine's wrapping of inherited unix pipes (`uv_pipe_open` fails `EBADF`),
+  and the resulting error fired before julia can print anything -- a
+  silent instant exit.  GNU make under `-jN` hands every concurrently
+  running recipe except one a pipe as stdin ("bad stdin", `job.c`), so
+  the wine-hosted sysimage stages died by job-scheduling lottery -- which
+  happened to look like a Nix-sandbox problem (it isn't; seccomp,
+  no_new_privs, namespaces and ASLR-disabling were all ruled out
+  empirically).  The fix makes stdio handles that fail to wrap fall back
+  to the NUL device, the same graceful degradation julia already applies
+  to invalid handles.
+- `jl_cpu_threads` (`src/sys.c`): wine reports 0 active processors when
+  the unix-side CPU topology (`/sys`) is not visible, as in sandboxed
+  builds; the Windows branch lacked the >= 1 clamp every unix branch has,
+  and the zero sent julia 1.12's GC-thread arithmetic negative, spawning
+  a phantom thread that aborts during the sysimage bootstrap.
+
+With those two fixes 1.12+ builds fully sandboxed like 1.11.  (Their
+package builds also run the stdlib package-image stage in a wine session
+of its own -- an aged wine session wedges the first precompile worker's
+exit -- and route wine-heavy stages through log files so their output
+survives for diagnosis.)
 
 ## Building Julia as a Nix package
 

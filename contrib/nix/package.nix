@@ -191,30 +191,8 @@ pkgs.stdenv.mkDerivation {
     # precompiles: each of those runs julia.exe under wine, and concurrent
     # wine process storms fail flakily (process spawn errors with no
     # diagnostics), so finish that last stage serially.
-    # wineserver holds one unix fd per Windows handle across the whole wine
-    # session, and the serial package-image stage churns through many
-    # julia.exe workers whose handles it slowly leaks; near the fd limit it
-    # starts failing process spawns with EMFILE.  Raise the builder's soft
-    # fd limit to the hard limit (run nix-build from a shell with a
-    # generous hard limit -- the builder inherits it), and give the
-    # package-image stage a fresh wineserver.
-    ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
     make -j$NIX_BUILD_CORES julia-release
-    # The stage can also wedge (a spawn fails, a precompile worker pipe
-    # blocks forever): bound each attempt and resume incrementally with a
-    # fresh wineserver.
-    # ... and worker-exit wedges correlate with wine-prefix/session history
-    # (a long-serving prefix hangs the first precompile worker at exit; a
-    # virgin prefix completes in minutes) -- give each attempt a fresh one.
-    ok=0
-    for attempt in 1 2 3; do
-      wineserver -k 2>/dev/null || true
-      export WINEPREFIX=$TMPDIR/wine-final-$attempt
-      sleep 2
-      if timeout 4h make -j1; then ok=1; break; fi
-      echo "final stage failed/timed out (attempt $attempt), retrying"
-    done
-    [ "$ok" = 1 ]
+    make -j1
     runHook postBuild
   '';
 
