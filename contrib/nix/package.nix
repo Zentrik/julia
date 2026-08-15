@@ -200,9 +200,17 @@ pkgs.stdenv.mkDerivation {
     # package-image stage a fresh wineserver.
     ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
     make -j$NIX_BUILD_CORES julia-release
-    wineserver -k 2>/dev/null || true
-    sleep 2
-    make -j1
+    # The stage can also wedge (a spawn fails, a precompile worker pipe
+    # blocks forever): bound each attempt and resume incrementally with a
+    # fresh wineserver.
+    ok=0
+    for attempt in 1 2 3; do
+      wineserver -k 2>/dev/null || true
+      sleep 2
+      if timeout 4h make -j1; then ok=1; break; fi
+      echo "final stage failed/timed out (attempt $attempt), retrying"
+    done
+    [ "$ok" = 1 ]
     runHook postBuild
   '';
 
