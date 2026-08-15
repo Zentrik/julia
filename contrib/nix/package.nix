@@ -203,9 +203,13 @@ pkgs.stdenv.mkDerivation {
     # The stage can also wedge (a spawn fails, a precompile worker pipe
     # blocks forever): bound each attempt and resume incrementally with a
     # fresh wineserver.
+    # ... and worker-exit wedges correlate with wine-prefix/session history
+    # (a long-serving prefix hangs the first precompile worker at exit; a
+    # virgin prefix completes in minutes) -- give each attempt a fresh one.
     ok=0
     for attempt in 1 2 3; do
       wineserver -k 2>/dev/null || true
+      export WINEPREFIX=$TMPDIR/wine-final-$attempt
       sleep 2
       if timeout 4h make -j1; then ok=1; break; fi
       echo "final stage failed/timed out (attempt $attempt), retrying"
