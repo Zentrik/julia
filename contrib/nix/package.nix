@@ -191,7 +191,17 @@ pkgs.stdenv.mkDerivation {
     # precompiles: each of those runs julia.exe under wine, and concurrent
     # wine process storms fail flakily (process spawn errors with no
     # diagnostics), so finish that last stage serially.
+    # wineserver holds one unix fd per Windows handle across the whole wine
+    # session, and the serial package-image stage churns through many
+    # julia.exe workers whose handles it slowly leaks; near the fd limit it
+    # starts failing process spawns with EMFILE.  Raise the builder's soft
+    # fd limit to the hard limit (run nix-build from a shell with a
+    # generous hard limit -- the builder inherits it), and give the
+    # package-image stage a fresh wineserver.
+    ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
     make -j$NIX_BUILD_CORES julia-release
+    wineserver -k 2>/dev/null || true
+    sleep 2
     make -j1
     runHook postBuild
   '';
