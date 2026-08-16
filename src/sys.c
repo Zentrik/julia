@@ -461,14 +461,21 @@ JL_DLLEXPORT int jl_cpu_threads(void) JL_NOTSAFEPOINT
 #elif defined(_OS_WINDOWS_)
     //Try to get WIN7 API method
     GAPC gapc;
+    int count;
     if (jl_dlsym(jl_kernel32_handle, "GetActiveProcessorCount", (void **)&gapc, 0)) {
-        return gapc(ALL_PROCESSOR_GROUPS);
+        count = gapc(ALL_PROCESSOR_GROUPS);
     }
     else { //fall back on GetSystemInfo
         SYSTEM_INFO info;
         GetSystemInfo(&info);
-        return info.dwNumberOfProcessors;
+        count = info.dwNumberOfProcessors;
     }
+    // Like the other platform branches above, never report less than one CPU;
+    // e.g. wine reports 0 active processors when the unix-side cpu topology
+    // (/sys) is not visible, as in sandboxed builds.
+    if (count < 1)
+        return 1;
+    return count;
 #else
 #warning "cpu core detection not defined for this platform"
     return 1;

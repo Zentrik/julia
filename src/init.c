@@ -439,16 +439,25 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable)
 {
     void *handle;
     int err;
+    (void)err;
+    (void)stdio;
     // Duplicate the file descriptor so we can later dup it over if we want to redirect
     // STDIO without having to worry about closing the associated libuv object.
     // This also helps limit the impact other libraries can cause on our file handle.
+    // If the handle cannot be wrapped (duplication or the type-specific init
+    // below fails -- e.g. wine rejects duplicating some inherited handles and
+    // libuv rejects wine's wrapping of inherited unix pipes with EBADF),
+    // degrade to the bit bucket exactly like the invalid-handle case above:
+    // jl_errorf here would abort the process before error reporting is
+    // initialized, i.e. exit silently.
     if ((err = uv_dup(fd, &fd)))
-        jl_errorf("error initializing %s in uv_dup: %s (%s %d)", stdio, uv_strerror(err), uv_err_name(err), err);
+        goto fallback;
     switch(uv_guess_handle(fd)) {
     case UV_TTY:
         handle = malloc_s(sizeof(uv_tty_t));
         if ((err = uv_tty_init(jl_io_loop, (uv_tty_t*)handle, fd, 0))) {
-            jl_errorf("error initializing %s in uv_tty_init: %s (%s %d)", stdio, uv_strerror(err), uv_err_name(err), err);
+            free(handle);
+            goto fallback;
         }
         ((uv_tty_t*)handle)->data = NULL;
         uv_tty_set_mode((uv_tty_t*)handle, UV_TTY_MODE_NORMAL); // initialized cooked stdio
@@ -459,6 +468,7 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable)
     case UV_UDP:
         JL_FALLTHROUGH;
     case UV_UNKNOWN_HANDLE:
+    fallback:
         // dup the descriptor with a new one pointing at the bit bucket ...
 #if defined(_OS_WINDOWS_)
         CloseHandle(fd);
@@ -488,20 +498,24 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable)
     case UV_NAMED_PIPE:
         handle = malloc_s(sizeof(uv_pipe_t));
         if ((err = uv_pipe_init(jl_io_loop, (uv_pipe_t*)handle, 0))) {
-            jl_errorf("error initializing %s in uv_pipe_init: %s (%s %d)", stdio, uv_strerror(err), uv_err_name(err), err);
+            free(handle);
+            goto fallback;
         }
         if ((err = uv_pipe_open((uv_pipe_t*)handle, fd))) {
-            jl_errorf("error initializing %s in uv_pipe_open: %s (%s %d)", stdio, uv_strerror(err), uv_err_name(err), err);
+            free(handle);
+            goto fallback;
         }
         ((uv_pipe_t*)handle)->data = NULL;
         break;
     case UV_TCP:
         handle = malloc_s(sizeof(uv_tcp_t));
         if ((err = uv_tcp_init(jl_io_loop, (uv_tcp_t*)handle))) {
-            jl_errorf("error initializing %s in uv_tcp_init: %s (%s %d)", stdio, uv_strerror(err), uv_err_name(err), err);
+            free(handle);
+            goto fallback;
         }
         if ((err = uv_tcp_open((uv_tcp_t*)handle, (uv_os_sock_t)fd))) {
-            jl_errorf("error initializing %s in uv_tcp_open: %s (%s %d)", stdio, uv_strerror(err), uv_err_name(err), err);
+            free(handle);
+            goto fallback;
         }
         ((uv_tcp_t*)handle)->data = NULL;
         break;
