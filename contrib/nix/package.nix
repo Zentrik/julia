@@ -194,22 +194,21 @@ pkgs.stdenv.mkDerivation {
     # precompiles: each of those runs julia.exe under wine, and concurrent
     # wine process storms fail flakily (process spawn errors with no
     # diagnostics), so finish that last stage serially.
-    # The wine-hosted system image bootstrap is additionally flaky on its
-    # own (rare spurious failures/hangs); make is incremental, so retry a
-    # couple of times before giving up.
-    # Julia 1.12's wine-hosted bootstrap fails (silently) when its stdout
-    # is a pipe -- which the Nix builder's log always is -- but works when
-    # stdout is a regular file.  Route the wine-heavy stages through a log
-    # file and echo it afterwards.
-    ok=0
-    for attempt in 1 2 3; do
-      if make -j$NIX_BUILD_CORES julia-release > make-julia-release.log 2>&1; then
-        ok=1; tail -n 30 make-julia-release.log; break
-      fi
-      echo "julia-release failed (attempt $attempt); log tail:"
-      tail -n 40 make-julia-release.log
-    done
-    [ "$ok" = 1 ]
+    # Route the wine-heavy stages through log files (and echo the tails):
+    # their output would otherwise interleave uselessly in the builder log,
+    # and past silent-failure hunts needed exactly these logs.
+    make -j$NIX_BUILD_CORES julia-release > make-julia-release.log 2>&1 \
+      || { tail -n 40 make-julia-release.log; false; }
+    tail -n 30 make-julia-release.log
+    # Run the package-image stage in a wine session (prefix + wineserver) of
+    # its own: in the session that has just served the whole compile stage,
+    # the first stdlib precompile worker hangs forever at exit on a
+    # subprocess handle (isolated empirically with probe builds against the
+    # kept tree; not root-caused inside wine), while the same stage in a
+    # fresh session completes in minutes.
+    wineserver -k 2>/dev/null || true
+    export WINEPREFIX=$TMPDIR/wine-pkgimages
+    sleep 2
     make -j1 > make-final.log 2>&1 || { tail -n 60 make-final.log; false; }
     tail -n 15 make-final.log
     runHook postBuild
