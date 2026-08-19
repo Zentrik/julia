@@ -41,27 +41,51 @@ This tree carries two julia-side robustness fixes (worth upstreaming) that
 sandboxed wine cross-builds need:
 
 - `init_stdio_handle` (`src/init.c`): julia 1.12's newer libuv rejects
-  wine's wrapping of inherited unix pipes (`uv_pipe_open` fails `EBADF`),
-  and the resulting error fired before julia can print anything -- a
-  silent instant exit.  GNU make under `-jN` hands every concurrently
-  running recipe except one a pipe as stdin ("bad stdin", `job.c`), so
-  the wine-hosted sysimage stages died by job-scheduling lottery -- which
-  happened to look like a Nix-sandbox problem (it isn't; seccomp,
-  no_new_privs, namespaces and ASLR-disabling were all ruled out
-  empirically).  The fix makes stdio handles that fail to wrap fall back
-  to the NUL device, the same graceful degradation julia already applies
-  to invalid handles.
-- `jl_cpu_threads` (`src/sys.c`): wine reports 0 active processors when
-  the unix-side CPU topology (`/sys`) is not visible, as in sandboxed
-  builds; the Windows branch lacked the >= 1 clamp every unix branch has,
-  and the zero sent julia 1.12's GC-thread arithmetic negative, spawning
-  a phantom thread that aborts during the sysimage bootstrap.
+  wine's wrapping of inherited unix pipes.  Root cause: `uv_pipe_open` ->
+  `uv__set_pipe_handle` calls `SetNamedPipeHandleState`, which wine
+  implements as `NtSetInformationFile(FilePipeInformation)`; wineserver's
+  `set_named_pipe_info` handler only accepts real named-pipe objects, and
+  a unix-inherited pipe is wrapped as a generic fd-backed file object, so
+  the call fails `STATUS_OBJECT_TYPE_MISMATCH` -> `ERROR_INVALID_HANDLE`
+  -> libuv `UV_EBADF`, deterministically (verified with a standalone
+  Win32 reproducer).  Julia then died in `jl_errorf` before error
+  reporting works -- a silent instant exit.  GNU make under `-jN` hands
+  every concurrently running recipe except one a pipe as stdin ("bad
+  stdin", `job.c`), so the wine-hosted sysimage stages died by
+  job-scheduling lottery -- which happened to look like a Nix-sandbox
+  problem (it isn't; seccomp, no_new_privs, namespaces and
+  ASLR-disabling were all ruled out empirically).  The fix makes stdio
+  handles that fail to wrap fall back to the NUL device with a
+  diagnostic, the same graceful degradation julia already applies to
+  invalid handles.
+- `jl_cpu_threads` (`src/sys.c`): `GetActiveProcessorCount` returns 0
+  under wine when `/sys` is not visible, as in sandboxed builds.  Root
+  cause: wine's `create_logical_proc_info` opens
+  `/sys/devices/system/cpu/online`, returns `STATUS_NOT_IMPLEMENTED`
+  without it, and the processor-group table stays empty, so
+  `GetActiveProcessorCount` sums zero groups.  The Windows branch of
+  `jl_cpu_threads` lacked the >= 1 clamp every unix branch has, and the
+  zero sent julia 1.12's GC-thread arithmetic negative
+  (`jl_n_markthreads = cpu - 1 = -1`), spawning a phantom mutator thread
+  that aborts in `jl_finish_task` during the sysimage bootstrap.
 
 The package build additionally runs the stdlib package-image stage in a
-wine session of its own (an aged wine session wedges the first precompile
-worker's exit; isolated empirically, not root-caused inside wine) and
-routes wine-heavy stages through log files so their output survives for
-diagnosis.
+wine session of its own and routes wine-heavy stages through log files so
+their output survives for diagnosis.  The own-session isolation guards
+against an exit deadlock in julia's temp cleanup: when a precompile
+worker's cache pidfile is still held by a sibling process at exit
+(windows sharing semantics, faithfully emulated by wine -- `DeleteFile`
+fails `ERROR_SHARING_VIOLATION` while another handle lacks
+`FILE_SHARE_DELETE`, and removing the parent directory then fails
+`ERROR_DIR_NOT_EMPTY`), the worker cannot clean its temp paths;
+`Base.Filesystem.temp_cleanup_postprocess` then spawns a detached
+cleanup child that *by design* blocks until the parent dies, while the
+parent's generating-output exit path (`jl_wait_empty_begin`) waits for
+that child's process handle to leave the event loop -- a mutual wait
+that deadlocks the worker and wedges the whole stage behind it.  The
+race is timing-dependent, which is why long-lived, heavily-loaded wine
+sessions wedged reliably while fresh sessions never did.  This deadlock
+is a julia bug worth an upstream issue independent of wine.
 
 ## Building Julia as a Nix package
 
