@@ -435,6 +435,11 @@ static int uv_dup(uv_os_fd_t fd, uv_os_fd_t* dupfd) {
 }
 #endif
 
+static void free_stdio_handle_cb(uv_handle_t *handle) JL_NOTSAFEPOINT
+{
+    free(handle);
+}
+
 static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable) JL_NOTSAFEPOINT
 {
     void *handle;
@@ -455,6 +460,9 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable) J
     case UV_TTY:
         handle = malloc_s(sizeof(uv_tty_t));
         if ((err = uv_tty_init(jl_io_loop, (uv_tty_t*)handle, fd, 0))) {
+            // uv_tty_init only fails before registering the handle with the
+            // loop, so the memory can be freed directly (unlike the pipe/tcp
+            // open failures below, which happen after registration)
             free(handle);
             goto fallback;
         }
@@ -504,11 +512,11 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable) J
     case UV_NAMED_PIPE:
         handle = malloc_s(sizeof(uv_pipe_t));
         if ((err = uv_pipe_init(jl_io_loop, (uv_pipe_t*)handle, 0))) {
-            free(handle);
+            free(handle); // init failed: never registered
             goto fallback;
         }
         if ((err = uv_pipe_open((uv_pipe_t*)handle, fd))) {
-            free(handle);
+            uv_close((uv_handle_t*)handle, free_stdio_handle_cb); // registered by init
             goto fallback;
         }
         ((uv_pipe_t*)handle)->data = NULL;
@@ -516,11 +524,11 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable) J
     case UV_TCP:
         handle = malloc_s(sizeof(uv_tcp_t));
         if ((err = uv_tcp_init(jl_io_loop, (uv_tcp_t*)handle))) {
-            free(handle);
+            free(handle); // init failed: never registered
             goto fallback;
         }
         if ((err = uv_tcp_open((uv_tcp_t*)handle, (uv_os_sock_t)fd))) {
-            free(handle);
+            uv_close((uv_handle_t*)handle, free_stdio_handle_cb); // registered by init
             goto fallback;
         }
         ((uv_tcp_t*)handle)->data = NULL;
