@@ -438,9 +438,7 @@ static int uv_dup(uv_os_fd_t fd, uv_os_fd_t* dupfd) {
 static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable) JL_NOTSAFEPOINT
 {
     void *handle;
-    int err;
-    (void)err;
-    (void)stdio;
+    int err = 0;
     // Duplicate the file descriptor so we can later dup it over if we want to redirect
     // STDIO without having to worry about closing the associated libuv object.
     // This also helps limit the impact other libraries can cause on our file handle.
@@ -470,6 +468,13 @@ static void *init_stdio_handle(const char *stdio, uv_os_fd_t fd, int readable) J
         JL_FALLTHROUGH;
     case UV_UNKNOWN_HANDLE:
     fallback:
+        // Degrading a handle that failed to wrap (err != 0, via the gotos
+        // above) deserves a diagnostic; error reporting is not up yet at
+        // this point, so write it directly.  The by-design fallbacks for
+        // unknown handle types (fallthrough, err == 0) stay silent.
+        if (err)
+            jl_safe_printf("WARNING: failed to initialize stdio handle %s (error %d); using the bit bucket instead\n",
+                           stdio, err);
         // dup the descriptor with a new one pointing at the bit bucket ...
 #if defined(_OS_WINDOWS_)
         CloseHandle(fd);
